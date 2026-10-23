@@ -89,7 +89,7 @@ def seed_demo():
     if not conn.execute("SELECT 1 FROM users WHERE username='demo'").fetchone():
         conn.execute(
             "INSERT INTO users(username,email,password_hash,created_at) VALUES(?,?,?,?)",
-            ("demo", "demo@example.com", hash_password("demo1234"), time.time())
+            ("Mealmate", "Mealmate@example.com", hash_password("mealmate1234"), time.time())
         )
         conn.commit()
     conn.close()
