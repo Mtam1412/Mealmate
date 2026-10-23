@@ -84,6 +84,18 @@ def hash_password(password: str, salt: bytes | None = None):
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
     return salt.hex() + ":" + digest.hex()
 
+def seed_demo():
+    conn = db()
+    if not conn.execute("SELECT 1 FROM users WHERE username='demo'").fetchone():
+        conn.execute(
+            "INSERT INTO users(username,email,password_hash,created_at) VALUES(?,?,?,?)",
+            ("demo", "demo@example.com", hash_password("demo1234"), time.time())
+        )
+        conn.commit()
+    conn.close()
+
+
+seed_demo()
 
 def verify_password(password: str, stored: str):
     try:
@@ -186,7 +198,7 @@ def login(body: LoginIn, response: Response):
     #     max_age=7 * 24 * 3600, path="/"
     # )
     response.set_cookie("session", token, **COOKIE)
-    
+
     return {"ok": True, "username": row["username"], "email": row["email"]}
 
 
