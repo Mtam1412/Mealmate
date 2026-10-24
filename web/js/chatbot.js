@@ -1,29 +1,24 @@
-/* MealMate - Nutrition chatbot (English only)
- * Answers questions about protein, potassium, sodium, vitamins, calories... from the dish's total_nutrients (r.x in recipes.json.gz).
- *  1) Amount questions      -> answered instantly from the dish data (exact numbers, no AI and no API key needed).
- *  2) Explanation questions -> sent to the AI together with the dish's full nutrient data; if AI is unavailable, falls back to the numbers.
- *
- * Load this file AFTER js/app.js (<script src="js/chatbot.js"></script>).
- * Uses from app.js: $, esc, cur, tgt, ingList, fmt, getS, apiFetch, openAuth.
- * app.js must call cbOnSelect() inside select(r).
- */
+/* =====================================================================
+   MealMate – Nutrition chatbot (English only)
+   Trả lời câu hỏi về protein, potassium, sodium, vitamin, calo... từ total_nutrients của món (r.x).
+   KHÔNG dùng AI: mọi câu trả lời lấy thẳng từ dữ liệu của món.
+   Câu hỏi nằm ngoài dữ liệu (câu tự do) -> báo là chatbot chỉ trả lời được những loại câu hỏi nào.
 
-let chat = []; // conversation history of the widget: [{role:'user'|'assistant', content}]
+   Mục lục: 1) Tiện ích  2) Dữ liệu dinh dưỡng + chữ  3) Trả lời từ dữ liệu
+            4) Khung chat nổi  5) Xử lý câu hỏi  6) Khởi động
 
-/** Send turns to the backend (/api/generate) and return the answer text. */
-async function llm(turns){
-  const res = await apiFetch('api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input:turns})});
-  const out = await res.json().catch(()=>({}));
-  if(res.status===401 && typeof openAuth==='function') openAuth('login');
-  if(!res.ok) throw new Error(typeof out.detail==='string'?out.detail:'The assistant could not answer, please try again.');
-  return (out.text||'').trim() || 'Sorry, I have no answer for that.';
-}
-/** Tiny markdown: escape HTML, **bold**, line breaks. */
-function md(t){
-  return esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
-}
+   Nạp file này SAU js/app.js (<script src="js/chatbot.js"></script>).
+   Dùng từ app.js: $, esc, cur, tgt, ingList, fmt.
+   app.js phải gọi cbOnSelect() trong select(r).
+   ===================================================================== */
 
-const CB_NUT = [ // [key in total_nutrients, unit, name, daily value, aliases (lower-case)]
+/* ---------- 1) Tiện ích ---------- */
+const cbSv = n => n===1?'serving':'servings';
+const nzq = s => String(s).toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+const cbNum = v => v>=100?String(Math.round(v)):v>=10?String(Math.round(v*10)/10):v>=1?String(Math.round(v*100)/100):v>=0.1?String(Math.round(v*1000)/1000):String(Math.round(v*10000)/10000);
+
+/* ---------- 2) Dữ liệu dinh dưỡng + chữ ---------- */
+const CB_NUT = [ // [khoá trong total_nutrients, đơn vị, tên, giá trị khuyến nghị/ngày, từ đồng nghĩa (chữ thường)]
   ['PROCNT','g','Protein',50,['protein','proteins']],
   ['FAT','g','Total fat',78,['total fat','fat','fats','lipid']],
   ['FASAT','g','Saturated fat',20,['saturated fat','saturated']],
@@ -55,7 +50,7 @@ const CB_NUT = [ // [key in total_nutrients, unit, name, daily value, aliases (l
   ['VITB12','\u00b5g','Vitamin B12',2.4,['vitamin b12','vit b12','b12']]
 ].map(([k,u,name,dv,a])=>({k,u,name,dv,a}));
 const CB_BY = Object.fromEntries(CB_NUT.map(n=>[n.k,n]));
-const CB_ALIAS = CB_NUT.flatMap(n=>n.a.map(a=>[a,n.k])).sort((x,y)=>y[0].length-x[0].length); // longest alias matches first: "saturated fat" beats "fat"
+const CB_ALIAS = CB_NUT.flatMap(n=>n.a.map(a=>[a,n.k])).sort((x,y)=>y[0].length-x[0].length); // từ dài khớp trước: "saturated fat" thắng "fat"
 const CB_GROUP = {
   vitamins:['VITA_RAE','VITC','VITD','TOCPHA','VITK1','THIA','RIBF','NIA','VITB6A','FOLDFE','VITB12'],
   minerals:['NA','K','CA','FE','MG','P','ZN'],
@@ -68,15 +63,13 @@ const CB_T = {
   hello:n=>`Hi! I'm the MealMate assistant. Ask me about the nutrition of \u201c${n}\u201d: protein, potassium, sodium, vitamins, calories\u2026`,
   hello0:`Hi! I'm the MealMate assistant. Pick a dish from the list, then ask me about its protein, potassium, sodium, vitamins and more.`,
   ctxNone:'No dish selected yet',
-  noAI:'I can answer questions about nutrient amounts, calories and ingredients from this dish\u2019s data (try \u201cHow much potassium?\u201d). For open-ended questions, the AI service needs to be enabled (GEMINI_API_KEY).',
-  aiFail:'The AI service is unavailable right now, so here are the numbers from the data instead.',
+  // Câu trả lời khi câu hỏi nằm ngoài dữ liệu (sửa nội dung ở đây)
+  noAnswer:'Sorry, I can only answer questions about this dish\u2019s nutrition data: nutrients (protein, fat, carbs, fiber, sugar, sodium, potassium, calcium, iron\u2026), vitamins, minerals, calories and ingredients. Try \u201cHow much protein?\u201d, \u201cVitamins\u201d or \u201cCalories\u201d.',
   p:'Protein',c:'Carbs',f:'Fat',salt:'(salt is measured as sodium)'
 };
-const cbSv = n => n===1?'serving':'servings';
-const nzq = s => String(s).toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
-const cbNum = v => v>=100?String(Math.round(v)):v>=10?String(Math.round(v*10)/10):v>=1?String(Math.round(v*100)/100):v>=0.1?String(Math.round(v*1000)/1000):String(Math.round(v*10000)/10000);
 
-/** Find the nutrients mentioned in the question. */
+/* ---------- 3) Trả lời từ dữ liệu ---------- */
+/** Tìm các chất dinh dưỡng được nhắc trong câu hỏi. */
 function cbFind(q){
   let s=' '+nzq(q)+' ',found=[];
   for(const [a,k] of CB_ALIAS){
@@ -84,8 +77,8 @@ function cbFind(q){
   }
   return found;
 }
-/** Work out the intent and build an answer from the dish data. Returns {text,html}, or null when the AI is needed. */
-function cbLocal(q, r, n, opt={}){
+/** Đoán ý định và tạo câu trả lời từ dữ liệu món. Trả về {text,html}, hoặc null khi câu hỏi nằm ngoài dữ liệu. */
+function cbLocal(q, r, n){
   const T=CB_T,s=nzq(q),x=r.x||{};
   const m=s.match(/(\d{1,2}) ?(servings?|people|persons?|portions?)\b/); if(m)n=Math.max(1,+m[1]);
   let keys=cbFind(q);
@@ -96,8 +89,6 @@ function cbLocal(q, r, n, opt={}){
     else if(/\b(minerals?)\b/.test(s))keys=CB_GROUP.minerals;
     else if(/\b(nutrition|nutrients?|nutritional|macros?|summary)\b/.test(s))keys=CB_GROUP.overview;
   }
-  const explain=/\b(why|what is|what are|what does|benefits?|good for|healthy|should|can i|how to|diabet\w*)\b/.test(s);
-  if(opt.forAI) return {keys,wantCal,wantIng,explain};
   if(wantCal&&!keys.length) return cbCalories(r,n,T);
   if(wantIng&&!keys.length) return cbIngredients(T);
   if(!keys.length) return null;
@@ -137,18 +128,13 @@ function cbIngredients(T){
   const l=ingList().map(i=>`${i.q?fmt(i.q)+' '+i.m+' ':''}${i.food}`.replace(/\s+/g,' ').trim());
   return {text:`${T.ing} (${tgt()} ${cbSv(tgt())}):\n- ${l.join('\n- ')}`,html:`<b>${T.ing}</b> (${tgt()} ${cbSv(tgt())})<ul>${l.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`};
 }
-/** Context sent to the AI: the dish's full nutrient data (per serving + whole recipe) taken from total_nutrients. */
-function cbContext(r,n){
-  const x=r.x||{},lines=CB_NUT.filter(u=>x[u.k]!=null).map(u=>`- ${u.name}: ${cbNum(x[u.k]/r.s)} ${u.u} per serving; ${cbNum(x[u.k])} ${u.u} for the whole original recipe${u.dv?` (${Math.round(x[u.k]/r.s/u.dv*100)}% daily value per serving)`:''}`);
-  return `DISH: ${r.n}\nOriginal servings: ${r.s}. User is cooking for: ${n} servings.\nCalories: ${Math.round(r.c)} kcal for the whole original recipe = ${Math.round(r.c/r.s)} kcal per serving.\nDiet labels: ${(r.d||[]).join(', ')||'none'}. Cuisine: ${(r.u||[]).join(', ')}. Dish type: ${(r.y||[]).join(', ')}.\nINGREDIENTS (scaled to ${n} servings): ${ingList().map(i=>`${i.q?fmt(i.q)+' '+i.m+' ':''}${i.food}`.replace(/\s+/g,' ').trim()).join('; ')}\nNUTRIENTS (from total_nutrients):\n${lines.join('\n')}`;
-}
-const CB_SYS='You are a friendly nutrition assistant inside a recipe website. Answer ONLY about the dish below, using ONLY the numbers in the data. Never invent or change numbers; if the data does not contain the answer, say so. Always reply in English, concisely (max ~120 words), plain text, no markdown tables. Give general nutrition facts only; no medical advice and no other dish suggestions.';
 
-/* ---------- Floating chatbot widget (bottom-right corner) ---------- */
+/* ---------- 4) Khung chat nổi (góc phải dưới) ---------- */
 const CW_AV='<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#30483a"/><path d="M13 23a6.5 6.5 0 0 1 3-12 7.5 7.5 0 0 1 16 0 6.5 6.5 0 0 1 3 12z" fill="#fff"/><rect x="14" y="21" width="20" height="5" rx="2.5" fill="#efe9dc"/><circle cx="24" cy="34" r="9.5" fill="#f6e3c3"/><circle cx="20.3" cy="33" r="1.5" fill="#252827"/><circle cx="27.7" cy="33" r="1.5" fill="#252827"/><path d="M21 37.2q3 2.6 6 0" stroke="#a64b4b" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="17.5" cy="36" r="1.7" fill="#f2a998" opacity=".65"/><circle cx="30.5" cy="36" r="1.7" fill="#f2a998" opacity=".65"/></svg>';
 const CW_IC=p=>`<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const CW_QUICK=[['\ud83e\udd69','Protein','How much protein?'],['\ud83c\udf4c','Potassium','How much potassium?'],['\ud83e\uddc2','Sodium','Sodium level?'],['\ud83e\uddb4','Calcium & iron','Calcium and iron?'],['\ud83d\udc8a','Vitamins','Vitamins'],['\ud83c\udf3e','Fiber & sugar','Fiber and sugar'],['\ud83e\uddc8','Fat','Fat and saturated fat'],['\ud83d\udd25','Calories','Calories'],['\ud83d\udccb','Full nutrition','Full nutrition'],['\ud83e\udd55','Ingredients','What ingredients are used?']];
 const cwTime=()=>new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
 function cwBuild(){
   if(document.getElementById('cw'))return;
   const w=document.createElement('div');w.id='cw';
@@ -183,7 +169,7 @@ function cbBubble(role,html){
   row.innerHTML=(isU?'':`<span class="cw-av">${CW_AV}</span>`)+`<div class="cw-col"><div class="cw-b">${html}</div><time>${cwTime()}</time></div>`;
   ms.append(row);ms.scrollTop=ms.scrollHeight;return row.querySelector('.cw-b');
 }
-/** Show/hide the suggested-question grid. Exactly one grid exists at a time; cwQuick() with no argument flips it. */
+/** Hiện/ẩn lưới câu hỏi gợi ý. Luôn chỉ có một lưới; cwQuick() không tham số thì đảo trạng thái. */
 function cwQuick(show){
   const ms=$('ms');if(!ms)return;
   const ex=ms.querySelector('.cw-quick');
@@ -198,39 +184,25 @@ function cwQuick(show){
 }
 function cwCtx(){const el=$('cwCtx');if(el)el.innerHTML=cur?`<span>Dish</span><b title="${esc(cur.n)}">${esc(cur.n)}</b>`:`<span>${CB_T.ctxNone}</span>`}
 function cwStart(){
-  const ms=$('ms');if(!ms)return;ms.innerHTML='';chat.length=0;
+  const ms=$('ms');if(!ms)return;ms.innerHTML='';
   cwCtx();cbBubble('a',esc(cur?CB_T.hello(cur.n):CB_T.hello0));cwQuick(true);
 }
-/** Called by app.js when the user picks a dish: the chatbot switches to that dish. */
+/** app.js gọi khi người dùng chọn một món: chatbot chuyển sang món đó. */
 function cbOnSelect(){
   cwBuild();cwStart();
   if($('cwWin').hidden)$('cwDot').hidden=false;
 }
-async function ask(q){
+
+/* ---------- 5) Xử lý câu hỏi ---------- */
+function ask(q){
   q=(q||'').trim();if(!q)return;
-  const T=CB_T,inp=$('cq'),btn=$('cs');
+  const T=CB_T,inp=$('cq');
   cwQuick(false);cbBubble('u',esc(q));if(inp)inp.value='';
   if(!cur){cbBubble('a',esc(T.pick));return}
-  const r=cur,n=tgt();
-  const wait=cbBubble('a','<span class="cw-typing"><i></i><i></i><i></i></span>');if(btn)btn.disabled=true;
-  const hist=chat.slice(-8);
-  let local=null;try{local=cbLocal(q,r,n)}catch(e){console.error(e)}
-  const info=cbLocal(q,r,n,{forAI:true});
-  let out;
-  if(local&&!info.explain){out=local}                        // amount question: answer straight from the data
-  else{
-    const ai=typeof getS==='function'?await getS():null;
-    if(ai){
-      try{
-        const turns=[{role:'user',content:CB_SYS+'\n\n'+cbContext(r,n)},{role:'assistant',content:'Understood. I will answer from this data only.'},...hist,{role:'user',content:q}];
-        const t=await llm(turns);
-        out={text:t,html:md(t)};
-      }catch(e){out=local?{text:T.aiFail+'\n'+local.text,html:`<p class="dim">${T.aiFail}</p>`+local.html}:{text:T.noAI,html:`<p>${esc(T.noAI)}</p>`}}
-    }else out=local?{text:local.text,html:local.html}:{text:T.noAI,html:`<p>${esc(T.noAI)}</p>`};
-  }
-  if(wait)wait.innerHTML=out.html;
-  if(cur===r)chat.push({role:'user',content:q},{role:'assistant',content:out.text});
-  const ms=$('ms');if(ms)ms.scrollTop=ms.scrollHeight;
-  if(btn)btn.disabled=false;
+  let out=null;try{out=cbLocal(q,cur,tgt())}catch(e){console.error(e)}
+  if(out){cbBubble('a',out.html)}                            // có trong dữ liệu: trả lời thẳng từ dữ liệu của món
+  else{cbBubble('a',`<p>${esc(T.noAnswer)}</p>`);cwQuick(true)} // ngoài dữ liệu: báo chỉ trả lời được những loại câu hỏi nào, kèm các câu gợi ý
 }
-cwBuild(); // show the mascot as soon as the page opens, even before a dish is chosen
+
+/* ---------- 6) Khởi động ---------- */
+cwBuild(); // hiện linh vật ngay khi mở trang, kể cả khi chưa chọn món
