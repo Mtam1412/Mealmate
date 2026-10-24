@@ -162,7 +162,7 @@ def stream_recipe(r: dict):
     cp = _cache_path("recipetext", _dish_text(r))
     cached = _cache_get(cp)
     if cached and cached.get("text"):
-        yield cached["text"]                       # có sẵn trong cache -> trả cả công thức một lần, không gọi AI
+        yield cached["text"]                       
         return
 
     parts = []
@@ -172,10 +172,10 @@ def stream_recipe(r: dict):
             yield piece
     except AIError:
         if not parts:
-            raise                                  # chưa có chữ nào -> để main.py trả mã lỗi cho trình duyệt
+            raise                                  
         yield "\n\nNotes: The recipe was cut off. Please press the button again."
-        return                                     # viết dở thì KHÔNG lưu cache
+        return                                     
 
     text = "".join(parts)
     if text.strip():
-        _cache_set(cp, {"text": text})
+        _cache_set(cp, {"text": text}) 

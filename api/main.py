@@ -306,7 +306,7 @@ def recipe_ai_stream(body: RecipeIn, session: str | None = Cookie(default=None))
         raise HTTPException(401, "Vui lòng đăng nhập để tạo công thức.")
     stream = llm.stream_recipe(body.model_dump())
     try:
-        first = next(stream)   # lấy mẩu chữ đầu tiên; nếu lỗi thì báo đúng mã HTTP
+        first = next(stream)   
     except llm.AIError as e:
         raise HTTPException(e.status, e.message)
     except StopIteration:

@@ -89,7 +89,7 @@ Khi server đang chạy: `python scripts/test_api.py`
 
 ---
 
-## 7) Hạn chế (nên nêu trong báo cáo)
+## 7) Hạn chế 
 
 - Toàn bộ giao diện, tên món, nguyên liệu, nhãn và câu trả lời AI dùng tiếng Anh để cùng ngôn ngữ với dataset; nguyên liệu phải nhập bằng tiếng Anh.
 - Ảnh là link ngoài trong `image_url`, có thể hết hạn; khi lỗi, giao diện hiển thị biểu tượng theo loại món.
