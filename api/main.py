@@ -86,7 +86,7 @@ def hash_password(password: str, salt: bytes | None = None):
 
 def seed_demo():
     conn = db()
-    if not conn.execute("SELECT 1 FROM users WHERE username='demo'").fetchone():
+    if not conn.execute("SELECT 1 FROM users WHERE username='Mealmate'").fetchone():
         conn.execute(
             "INSERT INTO users(username,email,password_hash,created_at) VALUES(?,?,?,?)",
             ("Mealmate", "Mealmate@example.com", hash_password("mealmate1234"), time.time())
