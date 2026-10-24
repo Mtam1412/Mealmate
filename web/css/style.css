@@ -43,6 +43,11 @@ button:disabled{opacity:.55;cursor:default}
 .app{display:grid;grid-template-columns:230px minmax(0,1fr) 438px;min-height:100vh}
 .app.panel-off{grid-template-columns:230px minmax(0,1fr)}
 .main{padding:22px 18px 70px 25px;min-width:0}
+/* Khi cột chi tiết đóng: thu nội dung lại tối đa 1200px và căn giữa (4 món/hàng, thẻ gọn như mẫu) */
+.app.panel-off .main{
+  padding-left:max(25px,calc((100% - 1200px)/2));
+  padding-right:max(18px,calc((100% - 1200px)/2));
+}
 
 /* ---------- 3) Cột trái ---------- */
 .side{position:sticky;top:0;height:100vh;background:var(--side);border-right:1px solid #e8e3d8;
@@ -94,6 +99,18 @@ button:disabled{opacity:.55;cursor:default}
   padding:0 40px 0 17px;font:400 20px/1 var(--serif);color:var(--ink);cursor:pointer;outline:0;border-radius:12px;text-overflow:ellipsis}
 .chev{position:absolute;right:15px;top:50%;margin-top:-9px;font-size:18px;color:#2d3524;pointer-events:none}
 
+/* [MỚI] Ô Servings: nút − | ô nhập số 1–50 | nút +  (khớp #sv, #mi, #pl trong app.js) */
+.f-sv{min-width:0}
+.sv-field{padding:0 6px;gap:2px}
+.sv-field input{flex:1;min-width:0;padding:0;text-align:center;
+  -moz-appearance:textfield;appearance:textfield}
+.sv-field input::-webkit-outer-spin-button,
+.sv-field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sv-btn{flex:none;display:grid;place-items:center;width:30px;height:32px;padding:0;border:0;border-radius:8px;
+  background:transparent;font:500 24px/1 var(--serif);color:var(--green-d);user-select:none}
+.sv-btn:hover{background:rgba(92,100,64,.12)}
+.sv-btn:active{background:rgba(92,100,64,.2)}
+
 .chips{display:flex;flex-wrap:wrap;align-items:center;gap:11px;margin-top:8px;min-height:30px}
 .chip{display:inline-flex;align-items:center;gap:9px;height:29px;padding:0 11px 0 14px;border-radius:99px;background:var(--chip);
   font:400 16px/1 var(--serif);color:#3f4636;border:0}
@@ -131,12 +148,12 @@ button.chip:hover{background:#e7e3d1}
 .filters .chev{font-size:16px;margin-top:-8px;right:13px}
 #status{color:var(--mut);margin:14px 6px 0;font-size:17px}
 #status:empty{display:none}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px;margin-top:17px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:17px}
 .card{display:flex;flex-direction:column;background:var(--card);border-radius:14px;box-shadow:var(--shadow);
   border:1px solid rgba(228,223,208,.6);padding:3px 3px 12px;cursor:pointer;transition:transform .15s,box-shadow .15s}
 .card:hover{transform:translateY(-2px);box-shadow:0 2px 4px rgba(100,90,50,.08),0 10px 22px rgba(110,95,55,.14)}
 .ph,.p-hero{position:relative;overflow:hidden;display:grid;place-items:center;font-size:52px;background:hsl(var(--h) 28% 87%)}
-.ph{height:142px;border-radius:12px}
+.ph{height:auto;aspect-ratio:4/3;border-radius:12px}
 .ph img,.p-hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .heart{position:absolute;top:7px;right:7px;width:35px;height:35px;padding:0;border-radius:50%;border:0;
   background:rgba(251,249,243,.96);color:#2c3322;display:grid;place-items:center;z-index:2;box-shadow:0 1px 3px rgba(60,60,30,.15);font-size:21px}
@@ -145,8 +162,8 @@ button.chip:hover{background:#e7e3d1}
 .heart.on svg path{fill:currentColor}
 .heart:hover{transform:scale(1.07)}
 .cb{display:flex;flex-direction:column;flex:1;padding:12px 11px 0}
-.card h3{margin:0;font:700 23px/1.08 var(--serif);letter-spacing:-.005em;color:#222a1b;overflow-wrap:anywhere}
-.kc{margin:7px 0 0;font:400 18px/1.2 var(--serif);color:#2a3122}
+.card h3{margin:0;font:700 20px/1.1 var(--serif);letter-spacing:-.005em;color:#222a1b;overflow-wrap:anywhere}
+.kc{margin:6px 0 0;font:400 16px/1.2 var(--serif);color:#2a3122}
 .mt{margin:3px 0 0;font:400 14px/1.2 var(--serif);color:var(--green)}
 .tags{display:flex;flex-wrap:wrap;gap:9px;margin:10px 0 14px;min-height:27px}
 .tag{display:inline-block;padding:4px 11px;border-radius:99px;background:var(--chip);font:400 13.5px/1.15 var(--serif);color:#4a5140}
@@ -204,6 +221,15 @@ button.chip:hover{background:#e7e3d1}
 .ask .ic{font-size:27px}.ask:hover{background:#525c38}
 .noai .ai-only{display:none!important}
 
+/* Ô chỉnh khẩu phần trong Dish details */
+.p-sv{display:flex;align-items:center;gap:12px;margin:0 3px 12px 5px}
+.p-sv .lbl{flex:1}
+.sv-box{display:flex;align-items:center;gap:2px;height:40px;padding:0 6px;background:var(--field);border:1px solid var(--line);border-radius:11px}
+.sv-box:focus-within{border-color:#8f9a6b;box-shadow:0 0 0 3px rgba(122,135,84,.18)}
+.sv-box input{width:52px;height:100%;border:0;background:transparent;text-align:center;font:400 19px/1 var(--serif);color:var(--ink);outline:0;-moz-appearance:textfield;appearance:textfield}
+.sv-box input::-webkit-outer-spin-button,.sv-box input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sv-reset{border:0;background:none;padding:0;color:var(--green);font:600 15px/1 var(--serif);text-decoration:underline;text-underline-offset:3px}
+
 /* ---------- 7) Chatbot (Ask about this dish) ---------- */
 .chat{position:absolute;inset:0;background:#fbf8f2;display:flex;flex-direction:column;z-index:4}
 .chat .panel-head{padding-left:14px}
@@ -250,6 +276,9 @@ button.chip:hover{background:#e7e3d1}
   .hero-head h1{font-size:56px}
 }
 @media(min-width:1361px){.scrim{display:none}.app.panel-off .panel-wrap{display:none}}
+@media(min-width:1361px) and (max-width:1700px){
+  .app:not(.panel-off) .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 @media(max-width:1100px){
   .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }

@@ -54,9 +54,14 @@
           <div class="field has-icon"><span class="ic" data-icon="search"></span>
             <input id="ing" placeholder="chicken, carrot, potato..." autocomplete="off" aria-label="Ingredients"></div>
         </div>
-        <div class="f-sel">
+        <!-- [ĐÃ SỬA] Servings: ô nhập số 1–50 + nút − (#mi) / + (#pl), khớp với app.js -->
+        <div class="f-sel f-sv">
           <label class="lbl" for="sv">Servings</label>
-          <div class="field sel"><select id="sv" aria-label="Servings"></select><span class="ic chev" data-icon="chevron"></span></div>
+          <div class="field sv-field">
+            <button type="button" id="mi" class="sv-btn" aria-label="Decrease servings">−</button>
+            <input id="sv" type="number" inputmode="numeric" min="1" max="50" step="1" placeholder="Any" aria-label="Servings">
+            <button type="button" id="pl" class="sv-btn" aria-label="Increase servings">+</button>
+          </div>
         </div>
         <div class="f-sel">
           <label class="lbl" for="meal">Meal type</label>
@@ -124,7 +129,7 @@
         <p class="field-error" id="errEmail"></p>
       <label><span class="lbl">Password</span>
         <input id="authPassword" type="password" autocomplete="current-password" minlength="6" required></label>
-        <p class="field-error" id="errPassword"></p></label>
+        <p class="field-error" id="errPassword"></p>
       <p class="auth-error" id="authError" role="alert"></p>
       <button class="go auth-submit" id="authSubmit" type="submit">Sign in</button>
     </form>

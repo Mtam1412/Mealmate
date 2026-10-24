@@ -2,11 +2,16 @@
    MealMate – phần giao diện (JavaScript thuần, không cần thư viện)
    Cách đọc file này:
      1) Tiện ích nhỏ + biểu tượng (icon)
-     2) Tải dữ liệu + tìm kiếm + lọc + phân trang        (logic GỐC, giữ nguyên)
-     3) Cột chi tiết món + tính lại khẩu phần            (logic GỐC, giữ nguyên)
-     4) AI recipe (gọi /api/recipe-ai)                   (logic GỐC, giữ nguyên)
-     5) Chatbot "Ask about this dish" (gọi /api/generate)
+     2) Tải dữ liệu + tìm kiếm + lọc + phân trang
+     3) Cột chi tiết món + tính lại khẩu phần
+     4) AI recipe (gọi /api/recipe-ai-stream)
+     5) Gắn sự kiện cho giao diện
      6) Đăng ký / đăng nhập / đăng xuất                  (gọi /api/register, /api/login ...)
+   Chatbot (llm, md, chat, cbOnSelect...) nằm trong js/chatbot.js.
+
+   BẢN HỢP NHẤT: nền là bản mới. Hai phần lấy theo logic CŨ:
+     - Tìm nguyên liệu: chỉ khớp ĐÚNG tên đầy đủ (tập r.hs), chỉ bỏ qua số ít/số nhiều
+     - Ô khẩu phần #sv: ô nhập số (1–50) + nút #mi / #pl, không phải danh sách chọn
    ===================================================================== */
 
 /* ---------- 1) Tiện ích ---------- */
@@ -16,8 +21,7 @@ const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
 const fmt=v=>String(v>=100?Math.round(v):v>=10?Math.round(v*10)/10:Math.round(v*100)/100);
 // Hiện 0.5 thành "1/2", 1.25 thành "1 1/4" cho dễ đọc (chỉ để hiển thị)
 const FR={.25:"1/4",.33:"1/3",.5:"1/2",.67:"2/3",.75:"3/4"};
-const qty=v=>{if(v>=10)return fmt(v);const w=Math.floor(v+1e-9),t=FR[Math.round((v-w)*100)/100];return t?(w?w+" ":"")+t:fmt(v)};
-const EM={"main course":"🍽️",desserts:"🍰",drinks:"🥤","alcohol cocktail":"🍸",salad:"🥗",soup:"🍲",starter:"🥟",bread:"🍞",sandwiches:"🥪",pancake:"🥞",egg:"🍳","biscuits and cookies":"🍪","condiments and sauces":"🫙",cereals:"🥣"};
+const qty=v=>{if(v>=10)return fmt(v);const w=Math.floor(v+1e-9),t=FR[Math.round((v-w)*100)/100];return t?(w?w+" + ":"")+t:fmt(v)};const EM={"main course":"🍽️",desserts:"🍰",drinks:"🥤","alcohol cocktail":"🍸",salad:"🥗",soup:"🍲",starter:"🥟",bread:"🍞",sandwiches:"🥪",pancake:"🥞",egg:"🍳","biscuits and cookies":"🍪","condiments and sauces":"🫙",cereals:"🥣"};
 const IMGP="https://datahive-prod-dataset-products.s3.eu-central-1.amazonaws.com/dataset/346/";
 const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
@@ -56,26 +60,28 @@ const SERVER_HINT="Cannot reach the server. Please try again in a moment.";
 
 /* ---------- 2) Trạng thái + dữ liệu + tìm kiếm ---------- */
 const PAGE_SIZE=12;
-let R=[],home=[],list=[],page=1,cur=null,view="home",nt=0,SV,fav=ls("hm_fav",[]),hist=ls("hm_hist",[]),authMode="login",currentUser=null;
+let R=[],home=[],list=[],page=1,cur=null,view="home",nt=0,SV,fav=ls("hm_fav",[]),hist=ls("hm_hist",[]),authMode="login",currentUser=null,cs=1;
 const SUGGEST=["chicken","egg","rice","broccoli","tomato"];
 const hue=r=>[...(r.y[0]||"")].reduce((a,c)=>a+c.charCodeAt(0),0)*37%360;
 const img=r=>(EM[r.y[0]]||"🍴")+(r.m?`<img src="${esc(IMGP+r.m)}" alt="" loading="lazy" onerror="this.remove()">`:"");
-const tgt=()=>Math.max(1,+$("sv").value||cur.s);   // số khẩu phần đang chọn (mặc định = khẩu phần gốc)
+// [BẢN CŨ] số khẩu phần đang chọn: ô trống thì dùng khẩu phần gốc của món; chưa chọn món thì là 1
+const tgt=()=>Math.max(1,cs);
 const heartBtn=i=>`<button class="heart ${fav.includes(i)?"on":""}" data-fav="${i}" aria-label="Favorite">${ic("heart")}</button>`;
 
 async function load(){
  try{
   const resp=await fetch("data/recipes.json.gz");if(!resp.ok)throw new Error("cannot load data/recipes.json.gz");
   R=JSON.parse(await new Response(resp.body.pipeThrough(new DecompressionStream("gzip"))).text());
- }catch(e){$("status").textContent="Could not read the data ("+e.message+"Please use a recent version of Chrome, Edge, Safari or Firefox, or reload the page.";return}
- R.forEach(r=>r.h=r.g.map(i=>i[0]).join("|"));
+ }catch(e){$("status").textContent="Could not read the data ("+e.message+"). Please use a recent version of Chrome, Edge, Safari or Firefox, or reload the page.";return}
+ // [BẢN CŨ] tập tên nguyên liệu (chữ thường) của từng món để khớp ĐÚNG tên đầy đủ
+ R.forEach(r=>r.hs=new Set(r.g.map(i=>String(i[0]).toLowerCase().trim())));
  const opts=(id,all,key)=>{
   const c=new Set(R.flatMap(r=>r[key]));
   if(id==="meal")c.delete("brunch");
   $(id).innerHTML=`<option value="">${all}</option>`+[...c].sort().map(v=>`<option value="${esc(v)}">${esc(cap(v))}</option>`).join("");
  };
  opts("meal","All meals","t");opts("diet","All diets","d");opts("cu","All cuisines","u");opts("dish","All types","y");
- $("sv").innerHTML=`<option value="">Any</option>`+Array.from({length:50},(_,k)=>`<option value="${k+1}">${k+1}</option>`).join("");
+ // [BẢN CŨ] #sv là ô nhập số tự gõ, không đổ danh sách 1–50 vào nữa
  $("go").disabled=false;search();
  getS().then(s=>{if(!s)document.body.classList.add("noai")});
 }
@@ -100,13 +106,16 @@ function renderChips(){
 let ingTimer;
 
 function search(){
- const terms=ingTerms().map(t=>new RegExp("(^|[^a-z])"+t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(s|es)?($|[^a-z])"));
+ // [BẢN CŨ] mỗi nguyên liệu -> các biến thể số ít/số nhiều
+ const variants=s=>{const v=new Set([s,s+"s",s+"es"]);if(s.endsWith("es"))v.add(s.slice(0,-2));if(s.endsWith("s"))v.add(s.slice(0,-1));return[...v]};
+ /* Chỉ khớp ĐÚNG tên đầy đủ của food (vd "rice" không khớp "rice vinegar"); chỉ bỏ qua khác biệt số ít/số nhiều. */
+ const terms=ingTerms().map(t=>variants(t.replace(/\s+/g," ")));
  const n=+$("sv").value||0,q=$("q").value.trim().toLowerCase(),f={t:$("meal").value,d:$("diet").value,u:$("cu").value,y:$("dish").value},all=$("all").checked,ord=$("ord").value,out=[];
  for(const r of R){
   if(n&&(r.s<n-2||r.s>n+2))continue;
   if((f.t&&!r.t.includes(f.t))||(f.d&&!r.d.includes(f.d))||(f.u&&!r.u.includes(f.u))||(f.y&&!r.y.includes(f.y)))continue;
   if(q&&!r.n.toLowerCase().includes(q))continue;
-  let k=0;for(const re of terms)if(re.test(r.h))k++;
+  let k=0;for(const vs of terms)if(vs.some(x=>r.hs.has(x)))k++;
   if(terms.length&&(all?k<terms.length:k===0))continue;
   out.push({r,k});
  }
@@ -171,6 +180,7 @@ function setPanel(open){
 }
 function select(r){
  cur=r;hist=[r.i,...hist.filter(i=>i!==r.i)].slice(0,30);save("hm_hist",hist);
+ cs=+$("sv").value||r.s;
  if(typeof cbOnSelect==="function")cbOnSelect();
  $("pn").innerHTML=`<div class="p-hero" style="--h:${hue(r)}">${img(r)}${heartBtn(r.i)}</div>
  <h3 class="p-name">${esc(r.n)}</h3>
@@ -179,12 +189,18 @@ function select(r){
  <p class="p-line" id="pk"></p>
  <div class="p-tags">${r.d.map(v=>`<span class="tag">${esc(cap(v))}</span>`).join("")}</div>
  <div class="p-sep"></div>
+ <div class="p-sv"><span class="lbl">Servings</span>
+  <div class="sv-box"><button type="button" id="pmi" class="sv-btn" aria-label="Decrease servings">−</button>
+   <input id="psv" type="number" inputmode="numeric" min="1" max="50" step="1" value="${cs}" aria-label="Servings for this dish">
+   <button type="button" id="ppl" class="sv-btn" aria-label="Increase servings">+</button></div>
+  <button type="button" id="prs" class="sv-reset">Reset</button></div>
  <div class="p-ih"><span class="lbl">Ingredients</span><small id="pf"></small></div><ul id="pi"></ul>
  <section class="ai-box ai-only"><div class="ai-head"><img src="assets/images/leaf-ai.svg" alt=""><h3>AI Recipe</h3></div>
   <button id="gen" class="ai-gen">Write the recipe with AI</button><div id="rc"></div>
   <p class="note">Written by AI from the ingredients and servings above. Check doneness and food safety yourself.</p></section>`;
  draw();$("pn").scrollTop=0;setPanel(true);
 }
+function setCs(v){cs=Math.min(50,Math.max(1,Math.round(v)));const i=$("psv");if(i)i.value=cs;draw()}
 function draw(){
  const r=cur,t=tgt(),f=t/r.s;
  $("pk").textContent=`Calories: ${Math.round(r.c/r.s)} kcal / serving`;
@@ -194,8 +210,7 @@ function draw(){
 }
 const getS=async()=>{if(SV===undefined){try{SV=(await(await apiFetch("api/health")).json()).ai?true:null}catch(e){SV=null}}return SV};
 
-//Gọi công thức
-
+/* ---------- 4) AI recipe ---------- */
 function recipeTextHtml(t){
  const out=[];let open="";
  const close=()=>{if(open){out.push(`</${open}>`);open=""}};
@@ -212,7 +227,6 @@ function recipeTextHtml(t){
  }
  close();return out.join("");
 }
-
 
 async function gen(){
  const r=cur,b=$("gen"),box=$("rc");b.disabled=true;
@@ -245,8 +259,7 @@ function toggleFav(i){
  if(view==="fav")show(fav.map(i=>({r:R[i],k:0})));
 }
 
-
-/* ---------- Gắn sự kiện cho giao diện ---------- */
+/* ---------- 5) Gắn sự kiện cho giao diện ---------- */
 $("go").onclick=()=>{setIng(ingTerms());search()};
 $("ing").addEventListener("keydown",e=>{
  if(e.key==="Enter"){e.preventDefault();clearTimeout(ingTimer);const l=ingTerms();setIng(l);search()}   // Enter: chuẩn hoá "a, b, " rồi tìm
@@ -265,7 +278,12 @@ $("ingChips").addEventListener("click",e=>{
 });
 // Đổi bộ lọc là danh sách cập nhật ngay
 for(const id of["meal","diet","cu","dish","ord","all"])$(id).addEventListener("change",()=>{if(R.length)search()});
+// [BẢN CŨ] ô khẩu phần: nút − / + (giới hạn 1–50), gõ số thì cập nhật cột chi tiết, nhập xong (Enter / rời ô) thì tìm lại
+$("mi").onclick=()=>{$("sv").value=Math.max(1,(+$("sv").value||1)-1);if(cur)draw();if(R.length)search()};
+$("pl").onclick=()=>{$("sv").value=Math.min(50,(+$("sv").value||0)+1);if(cur)draw();if(R.length)search()};
+$("sv").addEventListener("input",()=>{if(cur)draw()});
 $("sv").addEventListener("change",()=>{if(cur)draw();if(R.length)search()});
+$("sv").addEventListener("keydown",e=>{if(e.key==="Enter"){if(cur)draw();if(R.length)search()}});
 $("nav").addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(!b)return;const v=b.dataset.v;
  if(v==="home"){view="home";nav();show(home)}else{view=v;nav();show((v==="fav"?fav:hist).map(i=>({r:R[i],k:0})))}});
 $("pager").addEventListener("click",e=>{const b=e.target.closest("[data-p]");if(b&&!b.disabled)goPage(b.dataset.p)});
@@ -274,7 +292,14 @@ $("grid").addEventListener("click",e=>{
  const c=e.target.closest(".card");if(c)select(R[+c.dataset.i]);
 });
 $("pn").addEventListener("click",e=>{const t=e.target,h=t.closest("[data-fav]");
- if(h)toggleFav(+h.dataset.fav);else if(t.id==="gen")gen()});
+ if(h)toggleFav(+h.dataset.fav);
+ else if(t.id==="gen")gen();
+ else if(t.closest("#pmi"))setCs(cs-1);
+ else if(t.closest("#ppl"))setCs(cs+1);
+ else if(t.closest("#prs"))setCs(cur.s)});
+// Gõ số vào ô: tính lại ngay khi số hợp lệ (1–50); rời ô thì chuẩn hoá lại
+$("pn").addEventListener("input",e=>{if(e.target.id!=="psv")return;const v=Math.round(+e.target.value);if(v>=1&&v<=50){cs=v;draw()}});
+$("pn").addEventListener("change",e=>{if(e.target.id==="psv")setCs(+e.target.value||cur.s)});
 $("pclose").onclick=()=>setPanel(false);
 $("scrim").onclick=()=>{setPanel(false)};
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("authModal").hidden)closeAuth()});
@@ -373,6 +398,6 @@ $("authForm").addEventListener("submit",async e=>{
 });
 
 renderAuth();renderChips();
-setPanel(innerWidth>1360);   // màn hình rộng: cột chi tiết luôn hiện; màn hình hẹp: chỉ hiện khi chọn món
+setPanel(false);   // lúc đầu luôn đóng; chỉ mở khi bấm vào một món
 loadMe();
 load();
