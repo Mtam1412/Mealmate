@@ -1,30 +1,27 @@
 /* =====================================================================
-   MealMate – phần giao diện (JavaScript thuần, không cần thư viện)
-   Cách đọc file này:
-     1) Tiện ích nhỏ + biểu tượng (icon)
-     2) Tải dữ liệu + tìm kiếm + lọc + phân trang
-     3) Cột chi tiết món + tính lại khẩu phần
-     4) AI recipe (gọi /api/recipe-ai-stream)
-     5) Gắn sự kiện cho giao diện
-     6) Đăng ký / đăng nhập / đăng xuất                  (gọi /api/register, /api/login ...)
-   Chatbot (llm, md, chat, cbOnSelect...) nằm trong js/chatbot.js.
-
-   BẢN HỢP NHẤT: nền là bản mới. Hai phần lấy theo logic CŨ:
-     - Tìm nguyên liệu: chỉ khớp ĐÚNG tên đầy đủ (tập r.hs), chỉ bỏ qua số ít/số nhiều
-     - Ô khẩu phần #sv: ô nhập số (1–50) + nút #mi / #pl, không phải danh sách chọn
+   MealMate – giao diện (JavaScript thuần)
+   Mục lục: 1) Tiện ích + icon  2) API + trạng thái  3) Tải dữ liệu
+            4) Tìm kiếm + phân trang  5) Chi tiết món + khẩu phần
+            6) AI recipe + yêu thích  7) Đăng nhập  8) Sự kiện + khởi động
+   Chatbot (cbOnSelect...) nằm trong js/chatbot.js.
    ===================================================================== */
 
-/* ---------- 1) Tiện ích ---------- */
+/* ---------- 1) Tiện ích + icon ---------- */
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
 const fmt=v=>String(v>=100?Math.round(v):v>=10?Math.round(v*10)/10:Math.round(v*100)/100);
-// Hiện 0.5 thành "1/2", 1.25 thành "1 1/4" cho dễ đọc (chỉ để hiển thị)
-const FR={.25:"1/4",.33:"1/3",.5:"1/2",.67:"2/3",.75:"3/4"};
-const qty=v=>{if(v>=10)return fmt(v);const w=Math.floor(v+1e-9),t=FR[Math.round((v-w)*100)/100];return t?(w?w+" + ":"")+t:fmt(v)};const EM={"main course":"🍽️",desserts:"🍰",drinks:"🥤","alcohol cocktail":"🍸",salad:"🥗",soup:"🍲",starter:"🥟",bread:"🍞",sandwiches:"🥪",pancake:"🥞",egg:"🍳","biscuits and cookies":"🍪","condiments and sauces":"🫙",cereals:"🥣"};
-const IMGP="https://datahive-prod-dataset-products.s3.eu-central-1.amazonaws.com/dataset/346/";
 const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+
+// Hiện 0.5 thành "1/2", 1.25 thành "1 + 1/4" (chỉ để hiển thị)
+const FR={.25:"1/4",.33:"1/3",.5:"1/2",.67:"2/3",.75:"3/4"};
+const qty=v=>{if(v>=10)return fmt(v);const w=Math.floor(v+1e-9),t=FR[Math.round((v-w)*100)/100];return t?(w?w+" + ":"")+t:fmt(v)};
+
+const EM={"main course":"🍽️",desserts:"🍰",drinks:"🥤","alcohol cocktail":"🍸",salad:"🥗",soup:"🍲",starter:"🥟",bread:"🍞",sandwiches:"🥪",pancake:"🥞",egg:"🍳","biscuits and cookies":"🍪","condiments and sauces":"🫙",cereals:"🥣"};
+const IMGP="https://datahive-prod-dataset-products.s3.eu-central-1.amazonaws.com/dataset/346/";
+const hue=r=>[...(r.y[0]||"")].reduce((a,c)=>a+c.charCodeAt(0),0)*37%360;
+const img=r=>(EM[r.y[0]]||"🍴")+(r.m?`<img src="${esc(IMGP+r.m)}" alt="" loading="lazy" onerror="this.remove()">`:"");
 
 // Biểu tượng SVG (đổi màu theo màu chữ xung quanh)
 const S='fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
@@ -45,35 +42,34 @@ const ICON={
 const ic=n=>`<span class="ic">${ICON[n]}</span>`;
 document.querySelectorAll("[data-icon]").forEach(el=>{el.innerHTML=ICON[el.dataset.icon]||""});
 
-/* ---------- Địa chỉ server (API) ----------
-   Bình thường trang và API cùng chạy ở http://localhost:8000 (uvicorn). Nếu bạn lỡ mở trang bằng
-   công cụ khác (Live Server, cổng 5500...), code tự tìm API ở cổng 8000 của cùng máy. */
+/* ---------- 2) API + trạng thái ----------
+   Trang và API thường cùng chạy ở http://localhost:8000 (uvicorn). Nếu mở bằng Live Server
+   (cổng 5500...), code tự tìm API ở cổng 8000 của cùng máy. */
 let API="",apiUp=false;
 const apiReady=(async()=>{
- const tries=["",`http://${location.hostname||"localhost"}:8000/`];
- for(const base of tries){
+ for(const base of ["",`http://${location.hostname||"localhost"}:8000/`]){
   try{const r=await fetch(base+"api/health",{credentials:"include"});if(r.ok&&(await r.json()).ai!==undefined){API=base;apiUp=true;return}}catch(e){}
  }
 })();
 const apiFetch=async(path,opt={})=>{await apiReady;return fetch(API+path,{credentials:"include",...opt})};
 const SERVER_HINT="Cannot reach the server. Please try again in a moment.";
+const getS=async()=>{if(SV===undefined){try{SV=(await(await apiFetch("api/health")).json()).ai?true:null}catch(e){SV=null}}return SV};
 
-/* ---------- 2) Trạng thái + dữ liệu + tìm kiếm ---------- */
 const PAGE_SIZE=12;
-let R=[],home=[],list=[],page=1,cur=null,view="home",nt=0,SV,fav=ls("hm_fav",[]),hist=ls("hm_hist",[]),authMode="login",currentUser=null,cs=1;
 const SUGGEST=["chicken","egg","rice","broccoli","tomato"];
-const hue=r=>[...(r.y[0]||"")].reduce((a,c)=>a+c.charCodeAt(0),0)*37%360;
-const img=r=>(EM[r.y[0]]||"🍴")+(r.m?`<img src="${esc(IMGP+r.m)}" alt="" loading="lazy" onerror="this.remove()">`:"");
-// [BẢN CŨ] số khẩu phần đang chọn: ô trống thì dùng khẩu phần gốc của món; chưa chọn món thì là 1
+let R=[],home=[],list=[],page=1,view="home",nt=0,ingTimer;      // dữ liệu + danh sách
+let cur=null,cs=1;                                              // món đang xem + số khẩu phần đang xem
+let SV,fav=ls("hm_fav",[]),hist=ls("hm_hist",[]),authMode="login",currentUser=null;
 const tgt=()=>Math.max(1,cs);
 const heartBtn=i=>`<button class="heart ${fav.includes(i)?"on":""}" data-fav="${i}" aria-label="Favorite">${ic("heart")}</button>`;
 
+/* ---------- 3) Tải dữ liệu ---------- */
 async function load(){
  try{
   const resp=await fetch("data/recipes.json.gz");if(!resp.ok)throw new Error("cannot load data/recipes.json.gz");
   R=JSON.parse(await new Response(resp.body.pipeThrough(new DecompressionStream("gzip"))).text());
  }catch(e){$("status").textContent="Could not read the data ("+e.message+"). Please use a recent version of Chrome, Edge, Safari or Firefox, or reload the page.";return}
- // [BẢN CŨ] tập tên nguyên liệu (chữ thường) của từng món để khớp ĐÚNG tên đầy đủ
+ // Tập tên nguyên liệu (chữ thường) của từng món để khớp ĐÚNG tên đầy đủ
  R.forEach(r=>r.hs=new Set(r.g.map(i=>String(i[0]).toLowerCase().trim())));
  const opts=(id,all,key)=>{
   const c=new Set(R.flatMap(r=>r[key]));
@@ -81,34 +77,29 @@ async function load(){
   $(id).innerHTML=`<option value="">${all}</option>`+[...c].sort().map(v=>`<option value="${esc(v)}">${esc(cap(v))}</option>`).join("");
  };
  opts("meal","All meals","t");opts("diet","All diets","d");opts("cu","All cuisines","u");opts("dish","All types","y");
- // [BẢN CŨ] #sv là ô nhập số tự gõ, không đổ danh sách 1–50 vào nữa
  $("go").disabled=false;search();
  getS().then(s=>{if(!s)document.body.classList.add("noai")});
 }
 
-// Nguyên liệu nằm NGAY TRONG ô Ingredients, cách nhau bằng dấu phẩy: "chicken, egg, rice, "
+/* ---------- 4) Tìm kiếm + phân trang ---------- */
+// Nguyên liệu nằm ngay trong ô Ingredients, cách nhau bằng dấu phẩy: "chicken, egg, rice, "
 const termsOf=v=>[...new Set(v.split(/[,;\n]+/).map(s=>s.trim().toLowerCase()).filter(Boolean))];
 const ingTerms=()=>termsOf($("ing").value);
-// Tự thêm dấu cách sau mỗi dấu phẩy: "chicken,egg" -> "chicken, egg"
-function tidyIng(){
+function tidyIng(){   // "chicken,egg" -> "chicken, egg"
  const el=$("ing"),v=el.value,t=v.replace(/\s*[,;]\s*(?=\S)/g,", ").replace(/[,;]$/,", ");
  if(t!==v)el.value=t;
 }
-// Ghi danh sách vào ô nhập, mỗi nguyên liệu kèm ", " để gõ tiếp món mới
 function setIng(list){$("ing").value=list.length?list.join(", ")+", ":"";renderChips()}
-// Dưới ô nhập: gợi ý bấm để thêm / bấm lại để bỏ (món đã chọn hiện đậm)
-function renderChips(){
+function renderChips(){   // gợi ý bấm để thêm / bấm lại để bỏ
  const all=ingTerms();
  $("ingChips").innerHTML=`<span class="chips-hint">Try:</span>`+SUGGEST.map(w=>{
   const on=all.includes(w);
   return `<button class="chip sug ${on?"on":""}" data-add="${w}" aria-pressed="${on}">${ic(on?"check":"plus")}${w}</button>`}).join("");
 }
-let ingTimer;
 
 function search(){
- // [BẢN CŨ] mỗi nguyên liệu -> các biến thể số ít/số nhiều
+ // Mỗi nguyên liệu -> biến thể số ít/số nhiều; chỉ khớp ĐÚNG tên đầy đủ (vd "rice" không khớp "rice vinegar")
  const variants=s=>{const v=new Set([s,s+"s",s+"es"]);if(s.endsWith("es"))v.add(s.slice(0,-2));if(s.endsWith("s"))v.add(s.slice(0,-1));return[...v]};
- /* Chỉ khớp ĐÚNG tên đầy đủ của food (vd "rice" không khớp "rice vinegar"); chỉ bỏ qua khác biệt số ít/số nhiều. */
  const terms=ingTerms().map(t=>variants(t.replace(/\s+/g," ")));
  const n=+$("sv").value||0,q=$("q").value.trim().toLowerCase(),f={t:$("meal").value,d:$("diet").value,u:$("cu").value,y:$("dish").value},all=$("all").checked,ord=$("ord").value,out=[];
  for(const r of R){
@@ -165,7 +156,7 @@ function goPage(p){
  window.scrollTo({top:$("grid").getBoundingClientRect().top+window.scrollY-80,behavior:"smooth"});
 }
 
-/* ---------- 3) Cột chi tiết món ---------- */
+/* ---------- 5) Chi tiết món + khẩu phần ---------- */
 // Nhân lượng nguyên liệu theo hệ số = khẩu phần chọn / khẩu phần gốc
 function ingList(){const f=tgt()/cur.s;return cur.g.map(([food,q,m,w])=>({food,q:q?q*f:null,m:m||"",w:w?w*f:null}))}
 const amount=i=>{
@@ -180,7 +171,7 @@ function setPanel(open){
 }
 function select(r){
  cur=r;hist=[r.i,...hist.filter(i=>i!==r.i)].slice(0,30);save("hm_hist",hist);
- cs=+$("sv").value||r.s;
+ cs=+$("sv").value||r.s;   // lấy số khẩu phần đang lọc; ô trống thì dùng khẩu phần gốc
  if(typeof cbOnSelect==="function")cbOnSelect();
  $("pn").innerHTML=`<div class="p-hero" style="--h:${hue(r)}">${img(r)}${heartBtn(r.i)}</div>
  <h3 class="p-name">${esc(r.n)}</h3>
@@ -208,9 +199,8 @@ function draw(){
  $("pi").innerHTML=ingList().map(i=>`<li><span class="nm">${esc(i.food)}</span><span class="am">${amount(i)}</span></li>`).join("");
  const rc=$("rc");if(rc)rc.innerHTML="";
 }
-const getS=async()=>{if(SV===undefined){try{SV=(await(await apiFetch("api/health")).json()).ai?true:null}catch(e){SV=null}}return SV};
 
-/* ---------- 4) AI recipe ---------- */
+/* ---------- 6) AI recipe + yêu thích ---------- */
 function recipeTextHtml(t){
  const out=[];let open="";
  const close=()=>{if(open){out.push(`</${open}>`);open=""}};
@@ -227,11 +217,9 @@ function recipeTextHtml(t){
  }
  close();return out.join("");
 }
-
 async function gen(){
  const r=cur,b=$("gen"),box=$("rc");b.disabled=true;
  box.textContent="Writing the recipe with AI...";
-
  try{
   const res=await apiFetch("api/recipe-ai-stream",{method:"POST",headers:{"Content-Type":"application/json"},
    body:JSON.stringify({name:r.n,servings:tgt(),ingredients:ingList().map(i=>({food:i.food,quantity:i.q,measure:i.m||null}))})});
@@ -252,59 +240,14 @@ async function gen(){
  }catch(e){if(cur===r)box.textContent=e.message}
  b.disabled=false;
 }
-
 function toggleFav(i){
  const on=!fav.includes(i);fav=on?[...fav,i]:fav.filter(x=>x!==i);save("hm_fav",fav);
  document.querySelectorAll(`[data-fav="${i}"]`).forEach(b=>b.classList.toggle("on",on));
  if(view==="fav")show(fav.map(i=>({r:R[i],k:0})));
 }
 
-/* ---------- 5) Gắn sự kiện cho giao diện ---------- */
-$("go").onclick=()=>{setIng(ingTerms());search()};
-$("ing").addEventListener("keydown",e=>{
- if(e.key==="Enter"){e.preventDefault();clearTimeout(ingTimer);const l=ingTerms();setIng(l);search()}   // Enter: chuẩn hoá "a, b, " rồi tìm
-});
-// Gõ tới đâu, dấu phẩy + cách tự được thêm và danh sách món tự cập nhật (chờ 0,4 giây sau khi ngừng gõ)
-$("ing").addEventListener("input",e=>{
- if(e.inputType&&e.inputType.startsWith("delete")){renderChips()}else tidyIng();
- renderChips();clearTimeout(ingTimer);ingTimer=setTimeout(()=>{if(R.length)search()},400);
-});
-$("q").addEventListener("keydown",e=>{if(e.key==="Enter")search()});
-$("ingChips").addEventListener("click",e=>{
- const ad=e.target.closest("[data-add]");if(!ad)return;
- const w=ad.dataset.add,l=ingTerms();
- setIng(l.includes(w)?l.filter(x=>x!==w):[...l,w]);   // bấm lần nữa thì bỏ món đó
- clearTimeout(ingTimer);search();
-});
-// Đổi bộ lọc là danh sách cập nhật ngay
-for(const id of["meal","diet","cu","dish","ord","all"])$(id).addEventListener("change",()=>{if(R.length)search()});
-// [BẢN CŨ] ô khẩu phần: nút − / + (giới hạn 1–50), gõ số thì cập nhật cột chi tiết, nhập xong (Enter / rời ô) thì tìm lại
-$("mi").onclick=()=>{$("sv").value=Math.max(1,(+$("sv").value||1)-1);if(cur)draw();if(R.length)search()};
-$("pl").onclick=()=>{$("sv").value=Math.min(50,(+$("sv").value||0)+1);if(cur)draw();if(R.length)search()};
-$("sv").addEventListener("input",()=>{if(cur)draw()});
-$("sv").addEventListener("change",()=>{if(cur)draw();if(R.length)search()});
-$("sv").addEventListener("keydown",e=>{if(e.key==="Enter"){if(cur)draw();if(R.length)search()}});
-$("nav").addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(!b)return;const v=b.dataset.v;
- if(v==="home"){view="home";nav();show(home)}else{view=v;nav();show((v==="fav"?fav:hist).map(i=>({r:R[i],k:0})))}});
-$("pager").addEventListener("click",e=>{const b=e.target.closest("[data-p]");if(b&&!b.disabled)goPage(b.dataset.p)});
-$("grid").addEventListener("click",e=>{
- const h=e.target.closest("[data-fav]");if(h){toggleFav(+h.dataset.fav);return}
- const c=e.target.closest(".card");if(c)select(R[+c.dataset.i]);
-});
-$("pn").addEventListener("click",e=>{const t=e.target,h=t.closest("[data-fav]");
- if(h)toggleFav(+h.dataset.fav);
- else if(t.id==="gen")gen();
- else if(t.closest("#pmi"))setCs(cs-1);
- else if(t.closest("#ppl"))setCs(cs+1);
- else if(t.closest("#prs"))setCs(cur.s)});
-// Gõ số vào ô: tính lại ngay khi số hợp lệ (1–50); rời ô thì chuẩn hoá lại
-$("pn").addEventListener("input",e=>{if(e.target.id!=="psv")return;const v=Math.round(+e.target.value);if(v>=1&&v<=50){cs=v;draw()}});
-$("pn").addEventListener("change",e=>{if(e.target.id==="psv")setCs(+e.target.value||cur.s)});
-$("pclose").onclick=()=>setPanel(false);
-$("scrim").onclick=()=>{setPanel(false)};
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("authModal").hidden)closeAuth()});
-
-/* ---------- 6) Đăng ký / đăng nhập ---------- */
+/* ---------- 7) Đăng ký / đăng nhập ---------- */
+const AUTH_ERR={401:"Incorrect username/email or password.",409:"That username or email is already taken.",422:"Please check the details you entered.",400:"Please check the details you entered."};
 function setErr(f,msg){            // f = "Username" | "Email" | "Password"
  const p=$("err"+f),i=$("auth"+f);
  if(p)p.textContent=msg;
@@ -326,8 +269,6 @@ function openAuth(mode="login"){
  setTimeout(()=>$("authUsername").focus(),50);
 }
 function closeAuth(){$("authModal").hidden=true}
-// Đổi thông báo lỗi của server (tiếng Việt) sang tiếng Anh cho khớp giao diện
-const AUTH_ERR={401:"Incorrect username/email or password.",409:"That username or email is already taken.",422:"Please check the details you entered.",400:"Please check the details you entered."};
 async function authRequest(url,payload){
  let r;
  try{r=await apiFetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}
@@ -353,19 +294,69 @@ function renderAuth(){
  }
 }
 async function loadMe(){
- try{
-  const r=await apiFetch("api/me");const d=await r.json();
-  currentUser=d.logged_in?d.user:null;renderAuth();
- }catch(e){currentUser=null;renderAuth()}
+ try{const r=await apiFetch("api/me");const d=await r.json();currentUser=d.logged_in?d.user:null;renderAuth()}
+ catch(e){currentUser=null;renderAuth()}
 }
 async function logout(){
  try{await apiFetch("api/logout",{method:"POST"})}catch(e){}
  currentUser=null;renderAuth();
 }
+
+/* ---------- 8) Sự kiện + khởi động ---------- */
+// Ô Ingredients + gợi ý
+$("go").onclick=()=>{setIng(ingTerms());search()};
+$("ing").addEventListener("keydown",e=>{
+ if(e.key==="Enter"){e.preventDefault();clearTimeout(ingTimer);setIng(ingTerms());search()}   // Enter: chuẩn hoá "a, b, " rồi tìm
+});
+$("ing").addEventListener("input",e=>{   // gõ xong 0,4 giây thì tự tìm
+ if(e.inputType&&e.inputType.startsWith("delete")){renderChips()}else tidyIng();
+ renderChips();clearTimeout(ingTimer);ingTimer=setTimeout(()=>{if(R.length)search()},400);
+});
+$("ingChips").addEventListener("click",e=>{
+ const ad=e.target.closest("[data-add]");if(!ad)return;
+ const w=ad.dataset.add,l=ingTerms();
+ setIng(l.includes(w)?l.filter(x=>x!==w):[...l,w]);   // bấm lần nữa thì bỏ món đó
+ clearTimeout(ingTimer);search();
+});
+
+// Tên món + bộ lọc
+$("q").addEventListener("keydown",e=>{if(e.key==="Enter")search()});
+for(const id of["meal","diet","cu","dish","ord","all"])$(id).addEventListener("change",()=>{if(R.length)search()});
+
+// Ô Servings ở thanh tìm kiếm (lọc món, 1–50)
+$("mi").onclick=()=>{$("sv").value=Math.max(1,(+$("sv").value||1)-1);if(cur)draw();if(R.length)search()};
+$("pl").onclick=()=>{$("sv").value=Math.min(50,(+$("sv").value||0)+1);if(cur)draw();if(R.length)search()};
+$("sv").addEventListener("input",()=>{if(cur)draw()});
+$("sv").addEventListener("change",()=>{if(cur)draw();if(R.length)search()});
+$("sv").addEventListener("keydown",e=>{if(e.key==="Enter"){if(cur)draw();if(R.length)search()}});
+
+// Menu trái, danh sách, phân trang
+$("nav").addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(!b)return;const v=b.dataset.v;
+ if(v==="home"){view="home";nav();show(home)}else{view=v;nav();show((v==="fav"?fav:hist).map(i=>({r:R[i],k:0})))}});
+$("pager").addEventListener("click",e=>{const b=e.target.closest("[data-p]");if(b&&!b.disabled)goPage(b.dataset.p)});
+$("grid").addEventListener("click",e=>{
+ const h=e.target.closest("[data-fav]");if(h){toggleFav(+h.dataset.fav);return}
+ const c=e.target.closest(".card");if(c)select(R[+c.dataset.i]);
+});
+
+// Cột Dish details
+$("pn").addEventListener("click",e=>{const t=e.target,h=t.closest("[data-fav]");
+ if(h)toggleFav(+h.dataset.fav);
+ else if(t.id==="gen")gen();
+ else if(t.closest("#pmi"))setCs(cs-1);
+ else if(t.closest("#ppl"))setCs(cs+1);
+ else if(t.closest("#prs"))setCs(cur.s)});
+$("pn").addEventListener("input",e=>{if(e.target.id!=="psv")return;const v=Math.round(+e.target.value);if(v>=1&&v<=50){cs=v;draw()}});
+$("pn").addEventListener("change",e=>{if(e.target.id==="psv")setCs(+e.target.value||cur.s)});
+$("pclose").onclick=()=>setPanel(false);
+$("scrim").onclick=()=>setPanel(false);
+
+// Cửa sổ đăng nhập
 $("authClose").onclick=closeAuth;
 $("authModal").addEventListener("click",e=>{if(e.target===$("authModal"))closeAuth()});
 $("authSwitch").onclick=()=>openAuth(authMode==="login"?"register":"login");
 ["Username","Email","Password"].forEach(f=>$("auth"+f).addEventListener("input",()=>setErr(f,"")));
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("authModal").hidden)closeAuth()});
 $("authForm").addEventListener("submit",async e=>{
  e.preventDefault();
  const errBox=$("authError"),btn=$("authSubmit"),u=$("authUsername").value.trim(),em=$("authEmail").value.trim(),pw=$("authPassword").value;
@@ -397,6 +388,7 @@ $("authForm").addEventListener("submit",async e=>{
  btn.disabled=false;
 });
 
+// Khởi động
 renderAuth();renderChips();
 setPanel(false);   // lúc đầu luôn đóng; chỉ mở khi bấm vào một món
 loadMe();

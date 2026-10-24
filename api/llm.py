@@ -1,33 +1,27 @@
+"""
+MealMate – gọi Gemini để viết công thức (dạng stream) + lưu cache.
+
+Mục lục: 1) Cấu hình  2) Lỗi AI  3) Gemini client  4) Cache  5) Gọi Gemini (stream)
+         6) Hàm main.py gọi: stream_recipe
+"""
 import hashlib
 import json
 import os
+import re
 import threading
 import time
-import re
 
+
+# =====================================================================
+# 1) CẤU HÌNH
+# =====================================================================
 # Quá thời gian này (giây) mà Gemini chưa xong thì coi như lỗi.
 GEMINI_TIMEOUT_SEC = 30
 
-# Thư mục lưu cache 
+# Thư mục lưu cache.
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 # Đổi chuỗi này khi bạn sửa prompt, để cache cũ không còn được dùng.
 CACHE_VERSION = "v3-stream"
-
-_client = None
-
-
-def _get_client(key: str):
-    """Tạo Gemini client MỘT lần rồi dùng lại, để kết nối không bị đóng giữa chừng."""
-    global _client
-    if _client is None:
-        from google import genai
-        from google.genai import types
-        _client = genai.Client(
-            api_key=key,
-            http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SEC * 1000),  # đơn vị: mili giây
-        )
-    return _client
-
 
 SYSTEM_PROMPT = (
     "You are a helpful chef. Write a clear, practical recipe for the dish using ONLY the ingredient "
@@ -44,13 +38,37 @@ SYSTEM_PROMPT = (
 )
 
 
+# =====================================================================
+# 2) LỖI AI
+# =====================================================================
 class AIError(Exception):
     """Lỗi có kèm mã HTTP để main.py trả về cho trình duyệt."""
     def __init__(self, status: int, message: str):
         self.status, self.message = status, message
 
 
-# ---------- Cache (lưu file JSON) ----------
+# =====================================================================
+# 3) GEMINI CLIENT
+# =====================================================================
+_client = None
+
+
+def _get_client(key: str):
+    """Tạo Gemini client MỘT lần rồi dùng lại, để kết nối không bị đóng giữa chừng."""
+    global _client
+    if _client is None:
+        from google import genai
+        from google.genai import types
+        _client = genai.Client(
+            api_key=key,
+            http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SEC * 1000),  # đơn vị: mili giây
+        )
+    return _client
+
+
+# =====================================================================
+# 4) CACHE (lưu file JSON)
+# =====================================================================
 def _cache_path(prefix: str, text: str) -> str:
     h = hashlib.sha256(f"{CACHE_VERSION}|{text}".encode("utf-8")).hexdigest()[:24]
     return os.path.join(CACHE_DIR, f"{prefix}_{h}.json")
@@ -76,6 +94,7 @@ def _cache_set(path: str, data) -> None:
 
 
 def _dish_text(r: dict) -> str:
+    """Chuỗi mô tả món (tên, khẩu phần, nguyên liệu) dùng làm prompt và làm khoá cache."""
     lines = []
     for i in r["ingredients"]:
         measure = i.get("measure") if i.get("measure") != "<unit>" else ""
@@ -84,7 +103,9 @@ def _dish_text(r: dict) -> str:
             f"Ingredients (already scaled to {r['servings']} servings):\n" + "\n".join(lines))
 
 
-# ---------- Gọi Gemini ở chế độ stream ----------
+# =====================================================================
+# 5) GỌI GEMINI (stream)
+# =====================================================================
 def _gemini_stream(instructions: str, prompt: str):
     """Trả về (yield) từng mẩu chữ khi Gemini viết tới đâu."""
     key = os.environ.get("GEMINI_API_KEY")
@@ -98,6 +119,7 @@ def _gemini_stream(instructions: str, prompt: str):
     backup_model = os.environ.get("GEMINI_FALLBACK_MODEL", main_model)
     thinking_off = True      # thử tắt "thinking" cho nhanh; model nào không cho thì tự bỏ qua
     started = time.time()
+
     for attempt in range(3):
         model = main_model if attempt == 0 else backup_model
         config = types.GenerateContentConfig(
@@ -132,7 +154,10 @@ def _gemini_stream(instructions: str, prompt: str):
                           "AI service is busy, please retry" if limited else "AI service error, please retry")
     raise AIError(502, "AI service error, please retry")
 
-# ---------- Hàm main.py gọi: công thức dạng stream ----------
+
+# =====================================================================
+# 6) HÀM MAIN.PY GỌI: công thức dạng stream
+# =====================================================================
 def stream_recipe(r: dict):
     cp = _cache_path("recipetext", _dish_text(r))
     cached = _cache_get(cp)
@@ -141,7 +166,7 @@ def stream_recipe(r: dict):
         return
 
     parts = []
-    try: 
+    try:
         for piece in _gemini_stream(SYSTEM_PROMPT, _dish_text(r)):
             parts.append(piece)
             yield piece

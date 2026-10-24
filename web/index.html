@@ -47,6 +47,7 @@
       <p>Tell us what you have. We’ll help you turn it into a meal.</p>
     </header>
 
+    <!-- Ô tìm kiếm: nguyên liệu, khẩu phần, loại bữa, tên món -->
     <section class="card-box search-box" aria-label="Search">
       <div class="srow">
         <div class="f-ing">
@@ -54,7 +55,7 @@
           <div class="field has-icon"><span class="ic" data-icon="search"></span>
             <input id="ing" placeholder="chicken, carrot, potato..." autocomplete="off" aria-label="Ingredients"></div>
         </div>
-        <!-- [ĐÃ SỬA] Servings: ô nhập số 1–50 + nút − (#mi) / + (#pl), khớp với app.js -->
+        <!-- Servings: ô nhập số 1–50 + nút − (#mi) / + (#pl) -->
         <div class="f-sel f-sv">
           <label class="lbl" for="sv">Servings</label>
           <div class="field sv-field">
@@ -85,6 +86,7 @@
 
     <h2 class="rtitle"><span id="rtitle">Recipes</span><small id="cnt"></small></h2>
 
+    <!-- Bộ lọc -->
     <section class="card-box filters" id="filters" aria-label="Filters">
       <div class="fcol"><label class="lbl" for="diet">Diet</label>
         <div class="field sel"><select id="diet"></select><span class="ic chev" data-icon="chevron"></span></div></div>
@@ -98,6 +100,7 @@
         </select><span class="ic chev" data-icon="chevron"></span></div></div>
     </section>
 
+    <!-- Danh sách món + phân trang -->
     <div id="status" role="status">Loading recipes...</div>
     <div class="grid" id="grid"></div>
     <div id="pager" class="pager" aria-label="Recipe pages"></div>
@@ -123,13 +126,13 @@
     <form id="authForm" novalidate>
       <label id="usernameLabel"><span class="lbl" id="usernameText">Username or email</span>
         <input id="authUsername" autocomplete="username" required></label>
-        <p class="field-error" id="errUsername"></p>
+      <p class="field-error" id="errUsername"></p>
       <label id="emailLabel" hidden><span class="lbl">Email</span>
         <input id="authEmail" type="email" autocomplete="email"></label>
-        <p class="field-error" id="errEmail"></p>
+      <p class="field-error" id="errEmail"></p>
       <label><span class="lbl">Password</span>
         <input id="authPassword" type="password" autocomplete="current-password" minlength="6" required></label>
-        <p class="field-error" id="errPassword"></p>
+      <p class="field-error" id="errPassword"></p>
       <p class="auth-error" id="authError" role="alert"></p>
       <button class="go auth-submit" id="authSubmit" type="submit">Sign in</button>
     </form>

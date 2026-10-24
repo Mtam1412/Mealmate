@@ -1,28 +1,38 @@
-"""Backend cho Bếp thông minh.
+"""Backend cho Bếp thông minh (MealMate).
 Chạy từ thư mục gốc dự án:
     uvicorn api.main:app --port 8000
 rồi mở http://localhost:8000
+
+Mục lục: 1) Import + cấu hình  2) Ứng dụng + CORS  3) Cơ sở dữ liệu
+         4) Mật khẩu + phiên đăng nhập  5) API tài khoản  6) API chatbot (/api/generate)
+         7) API viết công thức AI  8) Trang web tĩnh
 """
 import hashlib
 import hmac
+import itertools
 import os
+import re
 import secrets
 import sqlite3
 import time
-import itertools
-from fastapi.responses import StreamingResponse
 from typing import List, Optional, Union
 
+from dotenv import load_dotenv
 from fastapi import Cookie, FastAPI, HTTPException, Response
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
+
 from . import llm
 
 
+# =====================================================================
+# 1) IMPORT + CẤU HÌNH
+# =====================================================================
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-from dotenv import load_dotenv
-load_dotenv(os.path.join(ROOT, ".env")) #đọc key từ .env
+load_dotenv(os.path.join(ROOT, ".env"))   # đọc key từ .env
+
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 DB_PATH = os.path.join(ROOT, "users.db")
 
@@ -30,10 +40,13 @@ IN_SPACE = bool(os.environ.get("SPACE_ID"))   # Hugging Face tự đặt biến 
 COOKIE = dict(httponly=True, max_age=7 * 24 * 3600, path="/",
               samesite="none" if IN_SPACE else "lax", secure=IN_SPACE)
 
+
+# =====================================================================
+# 2) ỨNG DỤNG + CORS
+# =====================================================================
 app = FastAPI(title="Bếp thông minh API")
 
 # Cho phép trang web mở từ công cụ khác (Live Server cổng 5500...) vẫn gọi được API này, kể cả đăng nhập (cookie).
-from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
@@ -47,6 +60,9 @@ def db_error(request, exc):
     return JSONResponse({"detail": f"Database error: {exc}"}, status_code=500)
 
 
+# =====================================================================
+# 3) CƠ SỞ DỮ LIỆU (SQLite: users, sessions)
+# =====================================================================
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -76,13 +92,11 @@ def init_db():
     conn.close()
 
 
-init_db()
-
-
 def hash_password(password: str, salt: bytes | None = None):
     salt = salt or secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
     return salt.hex() + ":" + digest.hex()
+
 
 def seed_demo():
     conn = db()
@@ -95,8 +109,13 @@ def seed_demo():
     conn.close()
 
 
+init_db()
 seed_demo()
 
+
+# =====================================================================
+# 4) MẬT KHẨU + PHIÊN ĐĂNG NHẬP
+# =====================================================================
 def verify_password(password: str, stored: str):
     try:
         salt_hex, digest_hex = stored.split(":", 1)
@@ -121,6 +140,13 @@ def current_user(session: str | None):
     return dict(row) if row else None
 
 
+def re_fullmatch(pattern, value):
+    return re.fullmatch(pattern, value) is not None
+
+
+# =====================================================================
+# 5) API TÀI KHOẢN: đăng ký / đăng nhập / đăng xuất / người dùng hiện tại
+# =====================================================================
 class RegisterIn(BaseModel):
     username: str = Field(min_length=3, max_length=30)
     email: str = Field(min_length=5, max_length=120)
@@ -163,12 +189,7 @@ def register(body: RegisterIn, response: Response):
     conn.commit()
     conn.close()
 
-    # response.set_cookie(
-    #     "session", token, httponly=True, samesite="lax",
-    #     max_age=7 * 24 * 3600, path="/"
-    # )
     response.set_cookie("session", token, **COOKIE)
-
     return {"ok": True, "username": username, "email": email}
 
 
@@ -193,12 +214,7 @@ def login(body: LoginIn, response: Response):
     conn.commit()
     conn.close()
 
-    # response.set_cookie(
-    #     "session", token, httponly=True, samesite="lax",
-    #     max_age=7 * 24 * 3600, path="/"
-    # )
     response.set_cookie("session", token, **COOKIE)
-
     return {"ok": True, "username": row["username"], "email": row["email"]}
 
 
@@ -219,6 +235,9 @@ def me(session: str | None = Cookie(default=None)):
     return {"logged_in": bool(user), "user": user}
 
 
+# =====================================================================
+# 6) API CHATBOT: kiểm tra AI + trả lời câu hỏi (/api/generate)
+# =====================================================================
 class Turn(BaseModel):
     role: str = Field(pattern="^(user|assistant)$")
     content: str = Field(min_length=1, max_length=8000)
@@ -265,7 +284,10 @@ def generate(body: GenIn):
             "AI service error or overloaded, please retry"
         )
 
-#call AI công thức
+
+# =====================================================================
+# 7) API VIẾT CÔNG THỨC AI (stream, cần đăng nhập)
+# =====================================================================
 class IngIn(BaseModel):
     food: str = Field(max_length=120)
     quantity: Optional[float] = None
@@ -276,6 +298,7 @@ class RecipeIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     servings: float = Field(gt=0, le=60)
     ingredients: List[IngIn] = Field(min_length=1, max_length=80)
+
 
 @app.post("/api/recipe-ai-stream")
 def recipe_ai_stream(body: RecipeIn, session: str | None = Cookie(default=None)):
@@ -293,10 +316,7 @@ def recipe_ai_stream(body: RecipeIn, session: str | None = Cookie(default=None))
                              headers={"Cache-Control": "no-cache"})
 
 
-
-def re_fullmatch(pattern, value):
-    import re
-    return re.fullmatch(pattern, value) is not None
-
-
+# =====================================================================
+# 8) TRANG WEB TĨNH (phải đặt CUỐI CÙNG, sau mọi route /api)
+# =====================================================================
 app.mount("/", StaticFiles(directory=os.path.join(ROOT, "web"), html=True), name="web")
