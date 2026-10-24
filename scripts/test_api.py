@@ -11,7 +11,6 @@ Cách chạy trên link web đã deploy (PowerShell):
     python scripts/test_api.py
 
 Mỗi trường hợp in một dòng [OK] hoặc [LỖI]; cuối cùng in tổng số trường hợp đạt.
-Mã 503 chấp nhận được khi chưa đặt GEMINI_API_KEY (server chạy nhưng chưa bật AI).
 
 Mục lục: 1) Cấu hình  2) Dữ liệu mẫu  3) Danh sách trường hợp kiểm thử  4) Chạy + báo kết quả
 """
@@ -26,7 +25,6 @@ import requests
 # =====================================================================
 # Địa chỉ server. Mặc định là máy của bạn; muốn thử trên web đã deploy thì đặt biến môi trường BASE_URL.
 B = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-turn = lambda r, c: {"role": r, "content": c}     # tạo một lượt hội thoại (dùng cho /api/generate)
 
 
 # =====================================================================
@@ -52,17 +50,6 @@ CASES = [
     ("Health", "get", "/api/health", None, (200,)),
     ("Trang chủ", "get", "/", None, (200,)),
     ("Dữ liệu nén", "get", "/data/recipes.json.gz", None, (200,)),
-
-    # --- /api/generate: dữ liệu hợp lệ (có gọi Gemini nên tốn một ít quota) ---
-    ("Câu lệnh hợp lệ", "post", "/api/generate", {"input": "Giải thích protein là gì, 2 câu"}, (200, 503)),
-    ("Hội thoại hợp lệ", "post", "/api/generate", {"input": [turn("user", "Natri là gì?")]}, (200, 503)),
-
-    # --- /api/generate: dữ liệu sai (phải bị từ chối bằng 422, không gọi Gemini) ---
-    ("Input rỗng", "post", "/api/generate", {"input": "   "}, (422,)),
-    ("Input quá dài", "post", "/api/generate", {"input": "a" * 9000}, (422,)),
-    ("Thiếu trường input", "post", "/api/generate", {}, (422,)),
-    ("Hội thoại kết thúc bằng assistant", "post", "/api/generate", {"input": [turn("user", "hi"), turn("assistant", "hello")]}, (422,)),
-    ("Vai trò sai", "post", "/api/generate", {"input": [turn("admin", "hi")]}, (422,)),
 
     # --- Đăng ký: một trường hợp đúng, các trường hợp còn lại phải bị từ chối ---
     ("Đăng ký hợp lệ", "post", "/api/register", OK_USER, (200,)),
@@ -102,7 +89,7 @@ def run_case(name, method, path, data, want):
 def main():
     print(f"Kiểm thử trên: {B}\n")
     ok = sum(run_case(*case) for case in CASES)
-    print(f"\n{ok}/{len(CASES)} trường hợp đạt (503 là chấp nhận được khi chưa đặt GEMINI_API_KEY)")
+    print(f"\n{ok}/{len(CASES)} trường hợp đạt")
 
 
 if __name__ == "__main__":

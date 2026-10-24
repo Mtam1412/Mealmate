@@ -4,7 +4,7 @@ Chạy từ thư mục gốc dự án:
 rồi mở http://localhost:8000
 
 Mục lục: 1) Import + cấu hình  2) Ứng dụng + CORS  3) Cơ sở dữ liệu
-         4) Mật khẩu + phiên đăng nhập  5) API tài khoản  6) API chatbot (/api/generate)
+         4) Mật khẩu + phiên đăng nhập  5) API tài khoản  6) Kiểm tra trạng thái
          7) API viết công thức AI  8) Trang web tĩnh
 """
 import hashlib
@@ -15,14 +15,14 @@ import re
 import secrets
 import sqlite3
 import time
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import Cookie, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from . import llm
 
@@ -33,7 +33,6 @@ from . import llm
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT, ".env"))   # đọc key từ .env
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 DB_PATH = os.path.join(ROOT, "users.db")
 
 IN_SPACE = bool(os.environ.get("SPACE_ID"))   # Hugging Face tự đặt biến này
@@ -234,55 +233,12 @@ def me(session: str | None = Cookie(default=None)):
     user = current_user(session)
     return {"logged_in": bool(user), "user": user}
 
-
 # =====================================================================
-# 6) API CHATBOT: kiểm tra AI + trả lời câu hỏi (/api/generate)
+# 6) API KIỂM TRA TRẠNG THÁI (giao diện dùng để biết có bật AI hay không)
 # =====================================================================
-class Turn(BaseModel):
-    role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(min_length=1, max_length=8000)
-
-
-class GenIn(BaseModel):
-    input: Union[str, List[Turn]]
-
-    @field_validator("input")
-    @classmethod
-    def check(cls, v):
-        if isinstance(v, str):
-            if not 1 <= len(v.strip()) <= 8000:
-                raise ValueError("input must be 1-8000 characters")
-        elif not 1 <= len(v) <= 20 or v[-1].role != "user":
-            raise ValueError("invalid conversation (1-20 turns, ending with a user turn)")
-        return v
-
-
 @app.get("/api/health")
 def health():
     return {"ai": bool(os.environ.get("GEMINI_API_KEY"))}
-
-
-@app.post("/api/generate")
-def generate(body: GenIn):
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
-        raise HTTPException(503, "GEMINI_API_KEY is not configured on the server")
-    from google import genai
-    contents = body.input if isinstance(body.input, str) else [
-        {"role": "user" if t.role == "user" else "model", "parts": [{"text": t.content}]}
-        for t in body.input
-    ]
-    client = genai.Client(api_key=key)  # giữ client trong biến để kết nối không bị đóng sớm
-    try:
-        r = client.models.generate_content(
-            model=MODEL, contents=contents
-        )
-        return {"text": r.text or ""}
-    except Exception as e:
-        raise HTTPException(
-            429 if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)) else 502,
-            "AI service error or overloaded, please retry"
-        )
 
 
 # =====================================================================
