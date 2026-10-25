@@ -2,10 +2,6 @@
 Chạy từ thư mục gốc dự án:
     uvicorn api.main:app --port 8000
 rồi mở http://localhost:8000
-
-Mục lục: 1) Import + cấu hình  2) Ứng dụng + CORS  3) Cơ sở dữ liệu
-         4) Mật khẩu + phiên đăng nhập  5) API tài khoản  6) Kiểm tra trạng thái
-         7) API viết công thức AI  8) Trang web tĩnh
 """
 import hashlib
 import hmac
@@ -26,10 +22,7 @@ from pydantic import BaseModel, Field
 
 from . import llm
 
-
-# =====================================================================
-# 1) IMPORT + CẤU HÌNH
-# =====================================================================
+# IMPORT + CẤU HÌNH
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT, ".env"))   # đọc key từ .env
 
@@ -40,12 +33,9 @@ COOKIE = dict(httponly=True, max_age=7 * 24 * 3600, path="/",
               samesite="none" if IN_SPACE else "lax", secure=IN_SPACE)
 
 
-# =====================================================================
-# 2) ỨNG DỤNG + CORS
-# =====================================================================
-app = FastAPI(title="Bếp thông minh API")
 
-# Cho phép trang web mở từ công cụ khác (Live Server cổng 5500...) vẫn gọi được API này, kể cả đăng nhập (cookie).
+# ỨNG DỤNG + CORS
+app = FastAPI(title="Bếp thông minh API")
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
@@ -53,15 +43,11 @@ app.add_middleware(
 )
 
 
-# Lỗi cơ sở dữ liệu (ví dụ users.db bị khóa / chỉ đọc) -> trả JSON có nội dung để giao diện hiện ra
 @app.exception_handler(sqlite3.Error)
 def db_error(request, exc):
     return JSONResponse({"detail": f"Database error: {exc}"}, status_code=500)
 
 
-# =====================================================================
-# 3) CƠ SỞ DỮ LIỆU (SQLite: users, sessions)
-# =====================================================================
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -112,9 +98,8 @@ init_db()
 seed_demo()
 
 
-# =====================================================================
-# 4) MẬT KHẨU + PHIÊN ĐĂNG NHẬP
-# =====================================================================
+# MẬT KHẨU + PHIÊN ĐĂNG NHẬP
+
 def verify_password(password: str, stored: str):
     try:
         salt_hex, digest_hex = stored.split(":", 1)
@@ -142,10 +127,7 @@ def current_user(session: str | None):
 def re_fullmatch(pattern, value):
     return re.fullmatch(pattern, value) is not None
 
-
-# =====================================================================
-# 5) API TÀI KHOẢN: đăng ký / đăng nhập / đăng xuất / người dùng hiện tại
-# =====================================================================
+# API TÀI KHOẢN: đăng ký / đăng nhập / đăng xuất / người dùng hiện tại
 class RegisterIn(BaseModel):
     username: str = Field(min_length=3, max_length=30)
     email: str = Field(min_length=5, max_length=120)
@@ -233,17 +215,14 @@ def me(session: str | None = Cookie(default=None)):
     user = current_user(session)
     return {"logged_in": bool(user), "user": user}
 
-# =====================================================================
-# 6) API KIỂM TRA TRẠNG THÁI (giao diện dùng để biết có bật AI hay không)
-# =====================================================================
+
+# API KIỂM TRA TRẠNG THÁI (giao diện dùng để biết có bật AI hay không)
 @app.get("/api/health")
 def health():
     return {"ai": bool(os.environ.get("GEMINI_API_KEY"))}
 
 
-# =====================================================================
-# 7) API VIẾT CÔNG THỨC AI (stream, cần đăng nhập)
-# =====================================================================
+# API VIẾT CÔNG THỨC AI (stream, cần đăng nhập)
 class IngIn(BaseModel):
     food: str = Field(max_length=120)
     quantity: Optional[float] = None
@@ -272,7 +251,6 @@ def recipe_ai_stream(body: RecipeIn, session: str | None = Cookie(default=None))
                              headers={"Cache-Control": "no-cache"})
 
 
-# =====================================================================
-# 8) TRANG WEB TĨNH (phải đặt CUỐI CÙNG, sau mọi route /api)
-# =====================================================================
+
+# TRANG WEB TĨNH (phải đặt CUỐI CÙNG, sau mọi route /api)
 app.mount("/", StaticFiles(directory=os.path.join(ROOT, "web"), html=True), name="web")

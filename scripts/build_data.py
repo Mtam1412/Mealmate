@@ -22,9 +22,7 @@ import os
 import pandas as pd
 
 
-# =====================================================================
 # 1) CẤU HÌNH
-# =====================================================================
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "data", "recipes_clean.xlsx")        # file đầu vào
 OUT = os.path.join(ROOT, "web", "data", "recipes.json.gz")    # file đầu ra cho trang web
@@ -37,9 +35,7 @@ NUTK = ("PROCNT FAT FASAT FAMS FAPU FATRN CHOLE CHOCDF SUGAR FIBTG WATER NA K CA
 PREFIX = "https://datahive-prod-dataset-products.s3.eu-central-1.amazonaws.com/dataset/346/"
 
 
-# =====================================================================
-# 2) ĐỌC TỪNG DÒNG
-# =====================================================================
+# ĐỌC TỪNG DÒNG
 L = lambda s: json.loads(s) if isinstance(s, str) and s else []   # cột danh sách dạng JSON; trống -> []
 
 
@@ -50,7 +46,7 @@ def make_recipe(r, index):
     tn = json.loads(r.total_nutrients)
     ings = json.loads(r.ingredients)
 
-    # Nguyên liệu: [tên, lượng (chỉ khi chia được theo khẩu phần), đơn vị, gram]
+    # Nguyên liệu: [tên, lượng, đơn vị, gram]
     ing = [[g.get("food") or "",
             round(g["quantity"], 2) if g.get("scalable") and g.get("quantity") else None,
             g.get("measure"),
@@ -64,9 +60,7 @@ def make_recipe(r, index):
             "x": {k: round(tn[k]["quantity"], 2) for k in NUTK if k in tn}}
 
 
-# =====================================================================
-# 3) CHẠY + GHI FILE
-# =====================================================================
+# CHẠY + GHI FILE
 def main():
     df = pd.read_excel(SRC, dtype=str)
     rows, bad = [], 0

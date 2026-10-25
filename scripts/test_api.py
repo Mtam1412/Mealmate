@@ -19,17 +19,12 @@ import time
 
 import requests
 
-
-# =====================================================================
 # 1) CẤU HÌNH
-# =====================================================================
-# Địa chỉ server. Mặc định là máy của bạn; muốn thử trên web đã deploy thì đặt biến môi trường BASE_URL.
+# Địa chỉ server; muốn thử trên web đã deploy thì đặt biến môi trường BASE_URL.
 B = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
-# =====================================================================
 # 2) DỮ LIỆU MẪU
-# =====================================================================
 # Tên tài khoản kèm số giây hiện tại => mỗi lần chạy test ra một tên mới, không bị báo "đã tồn tại".
 uname = f"test_{int(time.time())}"
 OK_USER = {"username": uname, "email": f"{uname}@example.com", "password": "abc12345"}   # tài khoản hợp lệ
@@ -39,7 +34,6 @@ RECIPE = {"name": "Test", "servings": 2,
           "ingredients": [{"food": "egg", "quantity": 2, "measure": None}]}
 
 
-# =====================================================================
 # 3) DANH SÁCH TRƯỜNG HỢP KIỂM THỬ
 #    (tên, phương thức, đường dẫn, dữ liệu gửi, các mã HTTP chấp nhận)
 #    Mã thường gặp: 200 = thành công, 400 = dữ liệu sai nội dung, 401 = chưa đăng nhập / sai mật khẩu,
@@ -70,9 +64,7 @@ CASES = [
 ]
 
 
-# =====================================================================
 # 4) CHẠY + BÁO KẾT QUẢ
-# =====================================================================
 def run_case(name, method, path, data, want):
     """Chạy một trường hợp, in kết quả, trả về 1 nếu đạt, 0 nếu không."""
     try:

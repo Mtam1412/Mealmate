@@ -1,17 +1,3 @@
-/* =====================================================================
-   MealMate – Nutrition chatbot (English only)
-   Trả lời câu hỏi về protein, potassium, sodium, vitamin, calo... từ total_nutrients của món (r.x).
-   KHÔNG dùng AI: mọi câu trả lời lấy thẳng từ dữ liệu của món.
-   Câu hỏi nằm ngoài dữ liệu (câu tự do) -> báo là chatbot chỉ trả lời được những loại câu hỏi nào.
-
-   Mục lục: 1) Tiện ích  2) Dữ liệu dinh dưỡng + chữ  3) Trả lời từ dữ liệu
-            4) Khung chat nổi  5) Xử lý câu hỏi  6) Khởi động
-
-   Nạp file này SAU js/app.js (<script src="js/chatbot.js"></script>).
-   Dùng từ app.js: $, esc, cur, tgt, ingList, fmt.
-   app.js phải gọi cbOnSelect() trong select(r).
-   ===================================================================== */
-
 /* ---------- 1) Tiện ích ---------- */
 const cbSv = n => n===1?'serving':'servings';
 const nzq = s => String(s).toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
@@ -69,7 +55,6 @@ const CB_T = {
 };
 
 /* ---------- 3) Trả lời từ dữ liệu ---------- */
-/** Tìm các chất dinh dưỡng được nhắc trong câu hỏi. */
 function cbFind(q){
   let s=' '+nzq(q)+' ',found=[];
   for(const [a,k] of CB_ALIAS){
@@ -169,7 +154,7 @@ function cbBubble(role,html){
   row.innerHTML=(isU?'':`<span class="cw-av">${CW_AV}</span>`)+`<div class="cw-col"><div class="cw-b">${html}</div><time>${cwTime()}</time></div>`;
   ms.append(row);ms.scrollTop=ms.scrollHeight;return row.querySelector('.cw-b');
 }
-/** Hiện/ẩn lưới câu hỏi gợi ý. Luôn chỉ có một lưới; cwQuick() không tham số thì đảo trạng thái. */
+
 function cwQuick(show){
   const ms=$('ms');if(!ms)return;
   const ex=ms.querySelector('.cw-quick');
@@ -187,7 +172,7 @@ function cwStart(){
   const ms=$('ms');if(!ms)return;ms.innerHTML='';
   cwCtx();cbBubble('a',esc(cur?CB_T.hello(cur.n):CB_T.hello0));cwQuick(true);
 }
-/** app.js gọi khi người dùng chọn một món: chatbot chuyển sang món đó. */
+
 function cbOnSelect(){
   cwBuild();cwStart();
   if($('cwWin').hidden)$('cwDot').hidden=false;
@@ -200,9 +185,9 @@ function ask(q){
   cwQuick(false);cbBubble('u',esc(q));if(inp)inp.value='';
   if(!cur){cbBubble('a',esc(T.pick));return}
   let out=null;try{out=cbLocal(q,cur,tgt())}catch(e){console.error(e)}
-  if(out){cbBubble('a',out.html)}                            // có trong dữ liệu: trả lời thẳng từ dữ liệu của món
-  else{cbBubble('a',`<p>${esc(T.noAnswer)}</p>`);cwQuick(true)} // ngoài dữ liệu: báo chỉ trả lời được những loại câu hỏi nào, kèm các câu gợi ý
+  if(out){cbBubble('a',out.html)}                            
+  else{cbBubble('a',`<p>${esc(T.noAnswer)}</p>`);cwQuick(true)} 
 }
 
-/* ---------- 6) Khởi động ---------- */
-cwBuild(); // hiện linh vật ngay khi mở trang, kể cả khi chưa chọn món
+
+cwBuild(); 

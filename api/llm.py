@@ -1,9 +1,3 @@
-"""
-MealMate – gọi Gemini để viết công thức (dạng stream) + lưu cache.
-
-Mục lục: 1) Cấu hình  2) Lỗi AI  3) Gemini client  4) Cache  5) Gọi Gemini (stream)
-         6) Hàm main.py gọi: stream_recipe
-"""
 import hashlib
 import json
 import os
@@ -11,16 +5,12 @@ import re
 import threading
 import time
 
-
-# =====================================================================
-# 1) CẤU HÌNH
-# =====================================================================
 # Quá thời gian này (giây) mà Gemini chưa xong thì coi như lỗi.
 GEMINI_TIMEOUT_SEC = 30
 
 # Thư mục lưu cache.
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-# Đổi chuỗi này khi bạn sửa prompt, để cache cũ không còn được dùng.
+# Đổi chuỗi này khi sửa prompt, để cache cũ không còn được dùng.
 CACHE_VERSION = "v3-stream"
 
 SYSTEM_PROMPT = (
@@ -37,21 +27,15 @@ SYSTEM_PROMPT = (
     "Optionally a last line starting with 'Notes:'."
 )
 
-
-# =====================================================================
-# 2) LỖI AI
-# =====================================================================
+#  LỖI AI
 class AIError(Exception):
     """Lỗi có kèm mã HTTP để main.py trả về cho trình duyệt."""
     def __init__(self, status: int, message: str):
         self.status, self.message = status, message
 
 
-# =====================================================================
-# 3) GEMINI CLIENT
-# =====================================================================
+# GEMINI CLIENT
 _client = None
-
 
 def _get_client(key: str):
     """Tạo Gemini client MỘT lần rồi dùng lại, để kết nối không bị đóng giữa chừng."""
@@ -66,9 +50,7 @@ def _get_client(key: str):
     return _client
 
 
-# =====================================================================
-# 4) CACHE (lưu file JSON)
-# =====================================================================
+# CACHE (lưu file JSON)
 def _cache_path(prefix: str, text: str) -> str:
     h = hashlib.sha256(f"{CACHE_VERSION}|{text}".encode("utf-8")).hexdigest()[:24]
     return os.path.join(CACHE_DIR, f"{prefix}_{h}.json")
@@ -88,10 +70,9 @@ def _cache_set(path: str, data) -> None:
         tmp = f"{path}.{threading.get_ident()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, path)          # ghi nguyên tử, tránh file hỏng khi 2 người gọi cùng lúc
+        os.replace(tmp, path)          
     except OSError:
-        pass                           # không ghi được cache thì thôi, không làm hỏng kết quả
-
+        pass                           
 
 def _dish_text(r: dict) -> str:
     """Chuỗi mô tả món (tên, khẩu phần, nguyên liệu) dùng làm prompt và làm khoá cache."""
@@ -103,9 +84,7 @@ def _dish_text(r: dict) -> str:
             f"Ingredients (already scaled to {r['servings']} servings):\n" + "\n".join(lines))
 
 
-# =====================================================================
-# 5) GỌI GEMINI (stream)
-# =====================================================================
+# GỌI GEMINI (stream)
 def _gemini_stream(instructions: str, prompt: str):
     """Trả về (yield) từng mẩu chữ khi Gemini viết tới đâu."""
     key = os.environ.get("GEMINI_API_KEY")
@@ -114,7 +93,7 @@ def _gemini_stream(instructions: str, prompt: str):
     from google.genai import types
 
     client = _get_client(key)
-    # Model chính (lần đầu) và model dự phòng (các lần thử lại khi model chính quá tải hoặc quá chậm).
+    
     main_model = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
     backup_model = os.environ.get("GEMINI_FALLBACK_MODEL", main_model)
     thinking_off = True      # thử tắt "thinking" cho nhanh; model nào không cho thì tự bỏ qua
@@ -155,9 +134,7 @@ def _gemini_stream(instructions: str, prompt: str):
     raise AIError(502, "AI service error, please retry")
 
 
-# =====================================================================
-# 6) HÀM MAIN.PY GỌI: công thức dạng stream
-# =====================================================================
+# HÀM MAIN.PY GỌI: công thức dạng stream
 def stream_recipe(r: dict):
     cp = _cache_path("recipetext", _dish_text(r))
     cached = _cache_get(cp)

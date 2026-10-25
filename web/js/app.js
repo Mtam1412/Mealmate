@@ -1,12 +1,3 @@
-/* =====================================================================
-   MealMate – giao diện (JavaScript thuần)
-   Mục lục: 1) Tiện ích + icon  2) API + trạng thái  3) Tải dữ liệu
-            4) Tìm kiếm + phân trang  5) Chi tiết món + khẩu phần
-            6) AI recipe + yêu thích  7) Đăng nhập  8) Sự kiện + khởi động
-   Chatbot (cbOnSelect...) nằm trong js/chatbot.js.
-   ===================================================================== */
-
-/* ---------- 1) Tiện ích + icon ---------- */
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
@@ -57,8 +48,8 @@ const getS=async()=>{if(SV===undefined){try{SV=(await(await apiFetch("api/health
 
 const PAGE_SIZE=12;
 const SUGGEST=["chicken","egg","rice","broccoli","tomato"];
-let R=[],home=[],list=[],page=1,view="home",nt=0,ingTimer;      // dữ liệu + danh sách
-let cur=null,cs=1;                                              // món đang xem + số khẩu phần đang xem
+let R=[],home=[],list=[],page=1,view="home",nt=0,ingTimer;      
+let cur=null,cs=1;                                              
 let SV,fav=ls("hm_fav",[]),hist=ls("hm_hist",[]),authMode="login",currentUser=null;
 const tgt=()=>Math.max(1,cs);
 const heartBtn=i=>`<button class="heart ${fav.includes(i)?"on":""}" data-fav="${i}" aria-label="Favorite">${ic("heart")}</button>`;
@@ -85,7 +76,7 @@ async function load(){
 // Nguyên liệu nằm ngay trong ô Ingredients, cách nhau bằng dấu phẩy: "chicken, egg, rice, "
 const termsOf=v=>[...new Set(v.split(/[,;\n]+/).map(s=>s.trim().toLowerCase()).filter(Boolean))];
 const ingTerms=()=>termsOf($("ing").value);
-function tidyIng(){   // "chicken,egg" -> "chicken, egg"
+function tidyIng(){   
  const el=$("ing"),v=el.value,t=v.replace(/\s*[,;]\s*(?=\S)/g,", ").replace(/[,;]$/,", ");
  if(t!==v)el.value=t;
 }
@@ -98,7 +89,6 @@ function renderChips(){   // gợi ý bấm để thêm / bấm lại để bỏ
 }
 
 function search(){
- // Mỗi nguyên liệu -> biến thể số ít/số nhiều; chỉ khớp ĐÚNG tên đầy đủ (vd "rice" không khớp "rice vinegar")
  const variants=s=>{const v=new Set([s,s+"s",s+"es"]);if(s.endsWith("es"))v.add(s.slice(0,-2));if(s.endsWith("s"))v.add(s.slice(0,-1));return[...v]};
  const terms=ingTerms().map(t=>variants(t.replace(/\s+/g," ")));
  const n=+$("sv").value||0,q=$("q").value.trim().toLowerCase(),f={t:$("meal").value,d:$("diet").value,u:$("cu").value,y:$("dish").value},all=$("all").checked,ord=$("ord").value,out=[];
